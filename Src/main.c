@@ -524,7 +524,7 @@ static void MX_GPIO_Init(void)
                           |A5_Pin|A6_Pin|A7_Pin|A8_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(nALD_GPIO_Port, nALD_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(nALD_GPIO_Port, nALD_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : LED2_Pin */
   GPIO_InitStruct.Pin = LED2_Pin;
@@ -546,14 +546,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = nALD_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(nALD_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : BOOT1_Pin SBY_Pin nLRQ_Pin */
-  GPIO_InitStruct.Pin = BOOT1_Pin|SBY_Pin|nLRQ_Pin;
+  /*Configure GPIO pins : BOOT1_Pin SBY_Pin */
+  GPIO_InitStruct.Pin = BOOT1_Pin|SBY_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : nLRQ_Pin */
+  GPIO_InitStruct.Pin = nLRQ_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(nLRQ_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB12 PB13 PB14 PB15 
                            PB3 PB4 PB5 PB6 
