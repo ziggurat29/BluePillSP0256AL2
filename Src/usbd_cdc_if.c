@@ -1,0 +1,479 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : usbd_cdc_if.c
+  * @version        : v2.0_Cube
+  * @brief          : Usb device for Virtual Com Port.
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2019 STMicroelectronics.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by ST under Ultimate Liberty license
+  * SLA0044, the "License"; You may not use this file except in compliance with
+  * the License. You may obtain a copy of the License at:
+  *                             www.st.com/SLA0044
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
+/* Includes ------------------------------------------------------------------*/
+#include "usbd_cdc_if.h"
+
+/* USER CODE BEGIN INCLUDE */
+#include "serial_devices.h"
+
+#include "task_monitor.h"
+
+
+//(these are currently internal to serial_devices.c; may get moved out)
+extern size_t XXX_Pull_USBCDC_TxData ( uint8_t* pbyBuffer, const size_t nMax );
+extern size_t XXX_Push_USBCDC_RxData ( const uint8_t* pbyBuffer, const size_t nAvail );
+/* USER CODE END INCLUDE */
+
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+/* Private macro -------------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE END PV */
+
+/** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
+  * @brief Usb device library.
+  * @{
+  */
+
+/** @addtogroup USBD_CDC_IF
+  * @{
+  */
+
+/** @defgroup USBD_CDC_IF_Private_TypesDefinitions USBD_CDC_IF_Private_TypesDefinitions
+  * @brief Private types.
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE_TYPES */
+
+/* USER CODE END PRIVATE_TYPES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_Defines USBD_CDC_IF_Private_Defines
+  * @brief Private defines.
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE_DEFINES */
+/* Define size for the receive and transmit buffer over CDC */
+/* It's up to user to redefine and/or remove those define */
+//this is a goofy linear buffer as required by the USB middleware, much in the
+//same way as for the UART stuff (there, the goofy buffer is 1 byte; here it is
+//the maximum transfer size for USB FS, 64 bytes.  I don't see any reason to
+//make it bigger.  I also don't see any reason to make it smaller, since there
+//is no provision for communicating the size of UserRxBufferFS, so it seems
+//like a buffer overflow fest to me in that regards.
+#define APP_RX_DATA_SIZE  CDC_DATA_FS_MAX_PACKET_SIZE
+#define APP_TX_DATA_SIZE  CDC_DATA_FS_MAX_PACKET_SIZE
+/* USER CODE END PRIVATE_DEFINES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_Macros USBD_CDC_IF_Private_Macros
+  * @brief Private macros.
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE_MACRO */
+
+/* USER CODE END PRIVATE_MACRO */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_Variables USBD_CDC_IF_Private_Variables
+  * @brief Private variables.
+  * @{
+  */
+/* Create buffer for reception and transmission           */
+/* It's up to user to redefine and/or remove those define */
+/** Received data over USB are stored in this buffer      */
+uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
+
+/** Data to send over USB CDC are stored in this buffer   */
+uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
+
+/* USER CODE BEGIN PRIVATE_VARIABLES */
+
+/* USER CODE END PRIVATE_VARIABLES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Exported_Variables USBD_CDC_IF_Exported_Variables
+  * @brief Public variables.
+  * @{
+  */
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
+
+/* USER CODE BEGIN EXPORTED_VARIABLES */
+
+/* USER CODE END EXPORTED_VARIABLES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_FunctionPrototypes USBD_CDC_IF_Private_FunctionPrototypes
+  * @brief Private functions declaration.
+  * @{
+  */
+
+static int8_t CDC_Init_FS(void);
+static int8_t CDC_DeInit_FS(void);
+static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length);
+static int8_t CDC_Receive_FS(uint8_t* pbuf, uint32_t *Len);
+/* USER CODE BEGIN MyCDCExt */
+static void CDC_TsComplete_FS (uint8_t* pbuf, uint32_t Len);
+//this is a little hack to work around the fact that re-generating code with
+//STM32CubeMX will overwrite our changes (since they have to be in a
+//non-"USER CODE BEGIN" demarcated block.  Further, when it does overwrite
+//those changes, the project will still build, but just not work.  This
+//presence hack will force the linkage to fail, making it obvious that the
+//changes need to be re-applied.
+void XXX_USBCDC_PresenceHack ( void )
+{
+	volatile int i = 0;	//thou shalt not optimize away
+	(void)i;	//thou shalt not cry
+}
+/* USER CODE END MyCDCExt */
+
+/* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
+
+/* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
+
+/**
+  * @}
+  */
+
+USBD_CDC_ItfTypeDef USBD_Interface_fops_FS =
+{
+  CDC_Init_FS,
+  CDC_DeInit_FS,
+  CDC_Control_FS,
+  CDC_Receive_FS
+/* USER CODE BEGIN MyCDCExt */
+  , CDC_TsComplete_FS
+/* USER CODE END MyCDCExt */
+};
+
+/* Private functions ---------------------------------------------------------*/
+/**
+  * @brief  Initializes the CDC media low layer over the FS USB IP
+  * @retval USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_Init_FS(void)
+{
+  /* USER CODE BEGIN 3 */
+  /* Set Application Buffers */
+	//for some reason we bind the TX buffer of zero length, but the generated
+	//code never uses that buffer again (it instead binds user buffers hoping
+	//they will remain stable for the lifetime of the transfer).
+	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, 0);
+	USBD_CDC_SetRxBuffer(&hUsbDeviceFS, UserRxBufferFS);
+	
+	//immediately 'arm' reception of data to prime the pump
+	USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+	
+  return (USBD_OK);
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief  DeInitializes the CDC media low layer
+  * @retval USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_DeInit_FS(void)
+{
+  /* USER CODE BEGIN 4 */
+  return (USBD_OK);
+  /* USER CODE END 4 */
+}
+
+/**
+  * @brief  Manage the CDC class requests
+  * @param  cmd: Command code
+  * @param  pbuf: Buffer containing command data (request parameters)
+  * @param  length: Number of data to be sent (in bytes)
+  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
+{
+  /* USER CODE BEGIN 5 */
+  switch(cmd)
+  {
+    case CDC_SEND_ENCAPSULATED_COMMAND:
+
+    break;
+
+    case CDC_GET_ENCAPSULATED_RESPONSE:
+
+    break;
+
+    case CDC_SET_COMM_FEATURE:
+
+    break;
+
+    case CDC_GET_COMM_FEATURE:
+
+    break;
+
+    case CDC_CLEAR_COMM_FEATURE:
+
+    break;
+
+  /*******************************************************************************/
+  /* Line Coding Structure                                                       */
+  /*-----------------------------------------------------------------------------*/
+  /* Offset | Field       | Size | Value  | Description                          */
+  /* 0      | dwDTERate   |   4  | Number |Data terminal rate, in bits per second*/
+  /* 4      | bCharFormat |   1  | Number | Stop bits                            */
+  /*                                        0 - 1 Stop bit                       */
+  /*                                        1 - 1.5 Stop bits                    */
+  /*                                        2 - 2 Stop bits                      */
+  /* 5      | bParityType |  1   | Number | Parity                               */
+  /*                                        0 - None                             */
+  /*                                        1 - Odd                              */
+  /*                                        2 - Even                             */
+  /*                                        3 - Mark                             */
+  /*                                        4 - Space                            */
+  /* 6      | bDataBits  |   1   | Number Data bits (5, 6, 7, 8 or 16).          */
+  /*******************************************************************************/
+    case CDC_SET_LINE_CODING:
+
+    break;
+
+    case CDC_GET_LINE_CODING:
+
+    break;
+
+    case CDC_SET_CONTROL_LINE_STATE:
+	{
+		//NOTE:  goofiness in usbd_cdc.c; we don't get the request object, and
+		//so we can't inspect the wValue of it.  This is significant, because
+		//this is what conveys the DTR/RTS state!  So this command is useless
+		//otherwise.
+		//However, if you inspect the logic at usbd_cdc.c:594 and at
+		//usbd_cdc.c:614, you'll see that the request is passed as the buffer
+		//pointer here, but with a length of zero!  So, if we're careful about
+		//validating that assumption, we can cast it back to get to the info
+		//we need.
+		if ( 0 == length )	//(which it always will be for this command)
+		{
+			USBD_SetupReqTypedef* preq = (USBD_SetupReqTypedef*)pbuf;
+			//for this command, the wValue has b0 = DTR and b1 = RTS
+			//well-discplined serial clients will assert DTR, and we
+			//can use that as an indication that a client application
+			//opened the port.
+			//NOTE:  These lines are often also set to an initial state
+			//by the host's driver, so do not consider these to be
+			//exclusively an indication of a client connecting.  Hosts
+			//usually will deassert these signals when this device
+			//enumerates.  Lastly, there is no guarantee that a client
+			//will assert DTR, so it's not 100% guarantee, just a pretty
+			//good indicator.
+			//NOTE:  we are in an ISR at this time
+			if ( preq->wValue & 1 )	//DTR
+			{	//probable client connecting
+				//We use this opportunity to notify the command processor
+				//task.
+				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+				xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_CONNECT, eSetBits, &xHigherPriorityTaskWoken );
+				portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+			}
+			else
+			{	//probable client disconnecting
+				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+				xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_DISCONNECT, eSetBits, &xHigherPriorityTaskWoken );
+				portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+			}
+			if ( preq->wValue & 2 )	//RTS
+			{
+			}
+			else
+			{
+			}
+		}
+	}
+
+    break;
+
+    case CDC_SEND_BREAK:
+
+    break;
+
+  default:
+    break;
+  }
+
+  return (USBD_OK);
+  /* USER CODE END 5 */
+}
+
+/**
+  * @brief  Data received over USB OUT endpoint are sent over CDC interface
+  *         through this function.
+  *
+  *         @note
+  *         This function will block any OUT packet reception on USB endpoint
+  *         untill exiting this function. If you exit this function before transfer
+  *         is complete on CDC interface (ie. using DMA controller) it will result
+  *         in receiving more data while previous ones are still not sent.
+  *
+  * @param  Buf: Buffer of data to be received
+  * @param  Len: Number of data received (in bytes)
+  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
+{
+  /* USER CODE BEGIN 6 */
+
+	//XXX this is the original stuff; this is a static function, so I think it
+	//is called-back from the driver?  It seems that this method takes a
+	//length, so I guess we are to hope we can take it all?  The param is a
+	//pointer, so are we meant to communicate back how much we could take in
+	//case we can't take it all?  Would that scenario violate the @note
+	//caveat?  hmm...
+	/*
+	USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
+	USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+	return (USBD_OK);
+	*/
+	
+	//new implementation; get it, and push it out of here for others to
+	//deal with.  This
+	USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
+	USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+	size_t nPushed = XXX_Push_USBCDC_RxData ( &Buf[0], (size_t)*Len );
+	if ( nPushed != *Len )
+	{
+		//horror; dropped data
+	}
+	
+	USBCDC_DataAvailable();	//notify data is available
+
+	return (USBD_OK);
+	
+  /* USER CODE END 6 */
+}
+
+/**
+  * @brief  CDC_Transmit_FS
+  *         Data to send over USB IN endpoint are sent over CDC interface
+  *         through this function.
+  *         @note
+  *
+  *
+  * @param  Buf: Buffer of data to be sent
+  * @param  Len: Number of data to be sent (in bytes)
+  * @retval USBD_OK if all operations are OK else USBD_FAIL or USBD_BUSY
+  */
+uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
+{
+  uint8_t result = USBD_OK;
+  /* USER CODE BEGIN 7 */
+
+	//XXX this is the original stuff.  It seems really goofy that the
+	//USBD_CDC_SetTxBuffer call sets up with the caller's buffer, instead of
+	//referencing the UserTxBufferFS, which as best as I can tell serves no
+	//useful function in this generated implementation (it is bound at init
+	//with a zero size, but we are now binding directly to user buffers for
+	//actual use of the driver, and there are no other references to the
+	//UserTxBufferFS.  hmmm.)
+	/*
+	USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+	if (hcdc->TxState != 0){
+		return USBD_BUSY;
+	}
+	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
+	result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+	*/
+	
+	//XXX new implementation:
+	//If we are not 'busy', try to kickstart the transmission by dequeueing
+	//as much as possible into our (goofy) private /linear buffer, and
+	//invoking USBD_CDC_SetTxBuffer and USBD_CDC_TransmitPacket.
+	//If we are 'busy', then we don't need to do anything special, because
+	//the CDC_TsComplete_FS callback will continue the process until the
+	//data is exhausted.
+	//There.  No goofy polling timers.  It's tacky we have to have these
+	//goofy private linear buffers, so maybe I'll eventually rewrite this
+	//stuff, but right now I'm going to leave well enough alone.
+	USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+	if (hcdc->TxState != 0){
+		return USBD_BUSY;
+	}
+	size_t nPulled = XXX_Pull_USBCDC_TxData ( UserTxBufferFS, APP_TX_DATA_SIZE );
+	if ( 0 != nPulled )
+	{
+		USBD_CDC_SetTxBuffer ( &hUsbDeviceFS, UserTxBufferFS, nPulled );
+		result = USBD_CDC_TransmitPacket ( &hUsbDeviceFS );
+	}
+	else
+	{
+		USBCDC_TransmitEmpty();	//notify transmit is empty
+	}
+	UNUSED(Buf);
+	UNUSED(Len);
+	
+  /* USER CODE END 7 */
+  return result;
+}
+
+/* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+
+//I added this callback (lower driver into us) to get notification that a
+//transmission has completed, and that now we can start some more.
+static void CDC_TsComplete_FS (uint8_t* pbuf, uint32_t Len)
+{
+	//just kick off a new transmission if we can.
+	CDC_Transmit_FS(NULL,0);	//Note, these parameters no longer have meaning
+	UNUSED(pbuf);
+	UNUSED(Len);
+}
+
+
+
+//the DAV callback (we make to the user) is optional
+__weak void USBCDC_DataAvailable ( void )
+{
+}
+
+//the TBMT callback (we make to the user) is optional
+__weak void USBCDC_TransmitEmpty ( void )
+{
+}
+
+
+
+/* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
