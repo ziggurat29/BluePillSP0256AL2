@@ -37,6 +37,7 @@
 #include "BluePillSP0256AL2_settings.h"
 
 #include "task_monitor.h"
+#include "task_sp0256.h"
 
 #include "backup_registers.h"
 
@@ -56,6 +57,7 @@ volatile int g_nMaxCDCTxQueue;
 volatile int g_nMaxCDCRxQueue;
 volatile int g_nMinStackFreeDefault;
 volatile int g_nMinStackFreeMonitor;
+volatile int g_nMinStackFreeSP0256;
 #endif
 
 #if USE_FREERTOS_HEAP_IMPL
@@ -199,6 +201,8 @@ int main(void)
   MX_TIM4_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+	SP0256_Initialize();	//setup whatnot for the SP0256 task processor and reset
 
   /* USER CODE END 2 */
 
@@ -521,10 +525,10 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, A1_Pin|A2_Pin|A3_Pin|A4_Pin 
-                          |A5_Pin|A6_Pin|A7_Pin|A8_Pin, GPIO_PIN_RESET);
+                          |A5_Pin|A6_Pin|SP_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(nALD_GPIO_Port, nALD_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(SP_nALD_GPIO_Port, SP_nALD_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : LED2_Pin */
   GPIO_InitStruct.Pin = LED2_Pin;
@@ -534,32 +538,37 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(LED2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : A1_Pin A2_Pin A3_Pin A4_Pin 
-                           A5_Pin A6_Pin A7_Pin A8_Pin */
+                           A5_Pin A6_Pin SP_RST_Pin */
   GPIO_InitStruct.Pin = A1_Pin|A2_Pin|A3_Pin|A4_Pin 
-                          |A5_Pin|A6_Pin|A7_Pin|A8_Pin;
+                          |A5_Pin|A6_Pin|SP_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : nALD_Pin */
-  GPIO_InitStruct.Pin = nALD_Pin;
+  /*Configure GPIO pins : PA7 PA8 PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : SP_nALD_Pin */
+  GPIO_InitStruct.Pin = SP_nALD_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
-  HAL_GPIO_Init(nALD_GPIO_Port, &GPIO_InitStruct);
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(SP_nALD_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : BOOT1_Pin SBY_Pin */
-  GPIO_InitStruct.Pin = BOOT1_Pin|SBY_Pin;
+  /*Configure GPIO pins : BOOT1_Pin SP_SBY_Pin */
+  GPIO_InitStruct.Pin = BOOT1_Pin|SP_SBY_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : nLRQ_Pin */
-  GPIO_InitStruct.Pin = nLRQ_Pin;
+  /*Configure GPIO pin : SP_nLRQ_Pin */
+  GPIO_InitStruct.Pin = SP_nLRQ_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(nLRQ_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(SP_nLRQ_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB12 PB13 PB14 PB15 
                            PB3 PB4 PB5 PB6 
@@ -570,10 +579,9 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA8 PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
 
@@ -587,6 +595,11 @@ static void MX_GPIO_Init(void)
 //this is made a function simply for tidiness, and locals lifetime
 void __startWorkerTasks ( void )
 {
+	//kick off the SP0256 thread, which handles sending phoneme data
+	{
+	osThreadStaticDef(taskSP0256, thrdfxnSP0256Task, osPriorityNormal, 0, COUNTOF(g_tbSP0256), g_tbSP0256, &g_tcbSP0256);
+	g_thSP0256 = osThreadCreate(osThread(taskSP0256), NULL);
+	}
 	//kick off the monitor thread, which handles the user interactions
 	{
 	osThreadStaticDef(taskMonitor, thrdfxnMonitorTask, osPriorityNormal, 0, COUNTOF(g_tbMonitor), g_tbMonitor, &g_tcbMonitor);
@@ -634,14 +647,16 @@ void vApplicationMallocFailedHook(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-/*
 	switch ( GPIO_Pin )
 	{
+		case SP_nLRQ_Pin:	//nLRQ falling edge
+			SP0256_GPIO_EXTI_Callback ( GPIO_Pin );
+		break;
+
 		default:
 			//XXX que?
 		break;
 	}
-*/
 }
 
 
@@ -684,6 +699,29 @@ void StartDefaultTask(void const * argument)
 
 	//start up worker threads
 	__startWorkerTasks();
+
+	//================================================
+	//temporary test crap
+	//#doors; Hello.  This was separately text-to-speeched.
+	static const uint8_t testcase_001[] = {
+		//"Hello, I love you"
+		0x1B, 0x07, 0x2D, 0x35, 0x03, 0x02, 0x04, 0x17, 0x06, 0x03, 0x02, 0x2D, 0x0F, 0x23, 0x1B, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02,
+		//"Won't you tell me your name?"
+		0x2E, 0x35, 0x0B, 0x0D, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02, 0x0D, 0x07, 0x2D, 0x03, 0x02, 0x10, 0x13, 0x03, 0x02, 0x19, 0x1E, 0x34, 0x03, 0x02, 0x0B, 0x14, 0x36, 0x10, 0x03, 0x02, 0x04, 0x04, 0x03,
+		//"Hello, I love you"
+		0x1B, 0x07, 0x2D, 0x35, 0x03, 0x02, 0x04, 0x17, 0x06, 0x03, 0x02, 0x2D, 0x0F, 0x23, 0x1B, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02,
+		//"Let me jump in your game"
+		0x2D, 0x07, 0x0D, 0x03, 0x02, 0x10, 0x13, 0x03, 0x02, 0x0A, 0x0F, 0x10, 0x09, 0x03, 0x02, 0x0C, 0x0C, 0x0B, 0x03, 0x02, 0x19, 0x1E, 0x34, 0x03, 0x02, 0x24, 0x14, 0x36, 0x10, 0x03, 0x02,
+		//"Hello, I love you"
+		0x1B, 0x07, 0x2D, 0x35, 0x03, 0x02, 0x04, 0x17, 0x06, 0x03, 0x02, 0x2D, 0x0F, 0x23, 0x1B, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02,
+		//"Won't you tell me your name?"
+		0x2E, 0x35, 0x0B, 0x0D, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02, 0x0D, 0x07, 0x2D, 0x03, 0x02, 0x10, 0x13, 0x03, 0x02, 0x19, 0x1E, 0x34, 0x03, 0x02, 0x0B, 0x14, 0x36, 0x10, 0x03, 0x02, 0x04, 0x04, 0x03,
+		//"Hello, I love you"
+		0x1B, 0x07, 0x2D, 0x35, 0x03, 0x02, 0x04, 0x17, 0x06, 0x03, 0x02, 0x2D, 0x0F, 0x23, 0x1B, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02,
+		//"Let me jump in your game"
+		0x2D, 0x07, 0x0D, 0x03, 0x02, 0x10, 0x13, 0x03, 0x02, 0x0A, 0x0F, 0x10, 0x09, 0x03, 0x02, 0x0C, 0x0C, 0x0B, 0x03, 0x02, 0x19, 0x1E, 0x34, 0x03, 0x02, 0x24, 0x14, 0x36, 0x10, 0x03, 0x02,
+	};
+	size_t nPushed = SP0256_push ( testcase_001, COUNTOF(testcase_001) );
 
 	//================================================
 	//continue running this task
@@ -729,6 +767,7 @@ void StartDefaultTask(void const * argument)
 		//free stack space measurements
 		g_nMinStackFreeDefault = uxTaskGetStackHighWaterMark ( defaultTaskHandle );
 		g_nMinStackFreeMonitor = uxTaskGetStackHighWaterMark ( g_thMonitor );
+		g_nMinStackFreeSP0256 = uxTaskGetStackHighWaterMark ( g_thSP0256 );
 		//XXX others
 #endif
 		

@@ -37,6 +37,8 @@ enum TaskNotificationBits
 	TNB_CLIENT_CONNECT = 0x00010000,	//a client has (probably) connected
 	TNB_CLIENT_DISCONNECT = 0x00020000,	//a client has (probably) disconnected
 
+	//bits for the SP0256 task
+	TNB_LRQ = 0x00010000,		//load request transitioned low (asserted)
 };
 
 
