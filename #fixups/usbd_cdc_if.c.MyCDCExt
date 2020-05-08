@@ -29,6 +29,9 @@
 //(these are currently internal to serial_devices.c; may get moved out)
 extern size_t XXX_Pull_USBCDC_TxData ( uint8_t* pbyBuffer, const size_t nMax );
 extern size_t XXX_Push_USBCDC_RxData ( const uint8_t* pbyBuffer, const size_t nAvail );
+
+__weak void USBCDC_DataAvailable ( void );
+__weak void USBCDC_TransmitEmpty ( void );
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -349,6 +352,7 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 	//deal with.  This
 	USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
 	USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+#if HAVE_USBCDC
 	size_t nPushed = XXX_Push_USBCDC_RxData ( &Buf[0], (size_t)*Len );
 	if ( nPushed != *Len )
 	{
@@ -356,6 +360,7 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 	}
 	
 	USBCDC_DataAvailable();	//notify data is available
+#endif
 
 	return (USBD_OK);
 	
@@ -408,6 +413,7 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
 	if (hcdc->TxState != 0){
 		return USBD_BUSY;
 	}
+#if HAVE_USBCDC
 	size_t nPulled = XXX_Pull_USBCDC_TxData ( UserTxBufferFS, APP_TX_DATA_SIZE );
 	if ( 0 != nPulled )
 	{
@@ -418,6 +424,7 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
 	{
 		USBCDC_TransmitEmpty();	//notify transmit is empty
 	}
+#endif
 	UNUSED(Buf);
 	UNUSED(Len);
 	
