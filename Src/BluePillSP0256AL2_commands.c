@@ -38,6 +38,8 @@ static CmdProcRetval cmdhdlDump ( const IOStreamIF* pio, const char* pszszTokens
 static CmdProcRetval cmdhdlDiag ( const IOStreamIF* pio, const char* pszszTokens );
 #endif
 
+static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTokens );
+
 
 //the array of command descriptors our application supports
 const CmdProcEntry g_aceCommands[] = 
@@ -50,6 +52,7 @@ const CmdProcEntry g_aceCommands[] =
 #ifdef DEBUG
 	{ "diag", cmdhdlDiag, "show diagnostic info (DEBUG build only)" },
 #endif
+	{ "ph", cmdhdlPhoneme, "send phoneme sequence [hex digits]+" },
 
 	{ "help", cmdhdlHelp, "get help on a command; help [cmd]" },
 };
@@ -657,6 +660,39 @@ static CmdProcRetval cmdhdlDump ( const IOStreamIF* pio, const char* pszszTokens
 		_cmdPutCRLF(pio);
 
 		nIdx += nToDo;
+	}
+
+	CWCMD_SendPrompt ( pio );
+	return CMDPROC_SUCCESS;
+}
+
+
+
+//========================================================================
+//'phoneme' command handler
+
+
+static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTokens )
+{
+	const char* pszPhoneme;
+
+	if ( NULL == pszszTokens )
+	{
+		_cmdPutString ( pio, "'ph' requires a hex sequence\r\n" );
+		CWCMD_SendPrompt ( pio );
+		return CMDPROC_ERROR;
+	}
+
+	pszPhoneme = pszszTokens;
+	while ( '\0' != *pszPhoneme && '\0' != *(pszPhoneme+1) )
+	{
+		uint8_t val = _parseHexByte ( pszPhoneme );
+		size_t nPushed;
+		while ( 0 == ( nPushed = SP0256_push ( &val, 1 ) ) )
+		{
+			osDelay ( 50 );	//(probably could be a lot more)
+		}
+		pszPhoneme += 2;
 	}
 
 	CWCMD_SendPrompt ( pio );
