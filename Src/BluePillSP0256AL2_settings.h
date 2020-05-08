@@ -21,6 +21,14 @@ extern "C" {
 #define PERSET_VERSION	1
 
 
+enum MONMODE {		//mode of the monitor task
+	MM_CMD = 0,		//0 == command processor mode (default)
+	MM_BRIDGE = 1,	//1 == serial-to-sp0256 bridge mode
+	MM_TTS = 2,		//2 == text-to-speech mode
+};
+
+
+
 //The persistent settings are stored in the last flash page.  It is simply a
 //fixed-size structure.  Updates are written sequentially to that page, and
 //the current version is the last version written.  Updating when there is
@@ -37,6 +45,7 @@ typedef struct
 	//============================
 	uint32_t	_version;	//should always be first, should be PERSET_VERSION
 
+	enum MONMODE	_eMM;	//the operational mode of the monitor
 } PersistentSettings;
 
 

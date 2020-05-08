@@ -478,8 +478,8 @@ static CmdProcRetval cmdhdlReboot ( const IOStreamIF* pio, const char* pszszToke
 //diagnostic variables in main.c
 extern volatile size_t g_nHeapFree;
 extern volatile size_t g_nMinEverHeapFree;
-extern volatile int g_nMaxCDCTxQueue;
-extern volatile int g_nMaxCDCRxQueue;
+extern volatile int g_nMaxMonTxQueue;
+extern volatile int g_nMaxMonRxQueue;
 extern volatile int g_nMaxSP0256Queue;
 extern volatile int g_nMinStackFreeDefault;
 extern volatile int g_nMinStackFreeMonitor;
@@ -515,9 +515,9 @@ static CmdProcRetval cmdhdlDiag ( const IOStreamIF* pio, const char* pszszTokens
 	_cmdPutCRLF(pio);
 
 	_cmdPutString ( pio, "Monitor max RX queue: " );
-	_cmdPutInt ( pio, g_nMaxCDCRxQueue, 0 );
+	_cmdPutInt ( pio, g_nMaxMonRxQueue, 0 );
 	_cmdPutString ( pio, ", max TX queue: " );
-	_cmdPutInt ( pio, g_nMaxCDCTxQueue, 0 );
+	_cmdPutInt ( pio, g_nMaxMonTxQueue, 0 );
 	_cmdPutCRLF(pio);
 
 	_cmdPutString ( pio, "SP0256 max queue: " );

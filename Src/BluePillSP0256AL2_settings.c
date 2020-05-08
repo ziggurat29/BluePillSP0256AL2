@@ -194,6 +194,8 @@ int Settings_persist ( void )
 const PersistentSettings g_defaultSettings = 
 {
 	._version = PERSET_VERSION,	//must be this
+
+	._eMM = MM_CMD,
 };
 
 

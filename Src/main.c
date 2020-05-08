@@ -46,6 +46,10 @@
 #define COUNTOF(arr) (sizeof(arr)/sizeof(arr[0]))
 #endif
 
+#if ! HAVE_UART1 && ! HAVE_USBCDC
+#error You must set at least one of HAVE_UART1 HAVE_USBCDC to 1 in project settings
+#endif
+
 //This controls whether we use the FreeRTOS heap implementation to also provide
 //the libc malloc() and friends.
 #define USE_FREERTOS_HEAP_IMPL 1
@@ -53,8 +57,8 @@
 #ifdef DEBUG
 volatile size_t g_nHeapFree;
 volatile size_t g_nMinEverHeapFree;
-volatile int g_nMaxCDCTxQueue;
-volatile int g_nMaxCDCRxQueue;
+volatile int g_nMaxMonTxQueue;
+volatile int g_nMaxMonRxQueue;
 volatile int g_nMaxSP0256Queue;
 volatile int g_nMinStackFreeDefault;
 volatile int g_nMinStackFreeMonitor;
@@ -395,7 +399,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 0;
+  htim3.Init.Period = 1440;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -451,9 +455,9 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 4095;
+  htim4.Init.Prescaler = 0;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 11999;
+  htim4.Init.Period = 6545;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -617,6 +621,11 @@ void __startWorkerTasks ( void )
 //miscellaneous hooks of our creation
 
 
+
+//XXX sync this with interface binding, below
+#if HAVE_UART1
+#elif HAVE_USBCDC
+
 //well-discplined serial clients will assert DTR, and we
 //can use that as an indication that a client application
 //opened the port.
@@ -628,29 +637,41 @@ void __startWorkerTasks ( void )
 //will assert DTR, so it's not 100% guarantee, just a pretty
 //good indicator.
 //NOTE:  we are in an ISR at this time
-
 void USBCDC_DTR ( int bAssert )
 {
-	if ( bAssert )
-	{	//probable client connecting
-		//We use this opportunity to notify the command processor
-		//task.
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_CONNECT, eSetBits, &xHigherPriorityTaskWoken );
-		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-	}
-	else
-	{	//probable client disconnecting
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_DISCONNECT, eSetBits, &xHigherPriorityTaskWoken );
-		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-	}
+	Monitor_ClientConnect ( bAssert );
+}
+
+//(unneeded)
+//void USBCDC_RTS ( int bAssert ) { }
+#endif
+
+
+
+
+//XXX sync this with interface binding, below
+#if HAVE_UART1
+void UART1_DataAvailable ( void )
+#elif HAVE_USBCDC
+void USBCDC_DataAvailable ( void )
+#endif
+{
+	//this notification is required because our Monitor is implemented with the
+	//non-blocking command interface, so we need to know when to wake and bake.
+	Monitor_DAV();
 }
 
 
-
-//unneeded
-//void USBCDC_RTS ( int bAssert ) { }
+//XXX sync this with interface binding, below
+#if HAVE_UART1
+void UART1_TransmitEmpty ( void )
+#elif HAVE_USBCDC
+void USBCDC_TransmitEmpty ( void )
+#endif
+{
+	//we don't really need this, but here's how you do it
+	Monitor_TBMT();
+}
 
 
 
@@ -734,13 +755,22 @@ void StartDefaultTask(void const * argument)
   /* USER CODE BEGIN 5 */
 
 	//crank up serial ports
-	//XXX (I wonder if this is best way up in main at least for USB; I ask
-	//because the MX_USB_DEVICE_Init() above could conceivably stimulate
-	//action on these buffers before they have been initialized
+#if HAVE_UART1
+	UART1_Init();	//UART1, alternative monitor
+#endif
+#if HAVE_USBCDC
 	USBCDC_Init();	//CDC == monitor
+#endif
 
 	//bind the interfaces to the relevant devices
+	//these 'HAVE_xxx' macros are in the preprocessor defs of the project
+	//XXX the following logic must be kept in sync with logic up above
+#if HAVE_UART1
+	//we'll prefer the physical UART if we've defined support for both
+	g_pMonitorIOIf = &g_pifUART1;	//monitor is on UART1
+#elif HAVE_USBCDC
 	g_pMonitorIOIf = &g_pifCDC;		//monitor is on USB CDC
+#endif
 	//light some lamps on a countdown
 	LightLamp ( 1000, &g_lltGn, _ledOnGn );
 
@@ -751,6 +781,13 @@ void StartDefaultTask(void const * argument)
 	//temporary test crap
 	{
 	volatile size_t nPushed;
+
+#if HAVE_UART1 && defined(DEBUG)
+	//the uart1 monitor is for my debugging convenience, but it doesn't have a
+	//'client connected' event, so squirt out a string to make it obvious we
+	//are live
+	g_pifUART1._transmitCompletely ( &g_pifUART1, "Hi, there!\r\n", 12, 1000 );
+#endif
 
 	(void) nPushed;
 	nPushed = 0;	//(just for breakpoint)
@@ -795,8 +832,14 @@ void StartDefaultTask(void const * argument)
 #else
 		g_nMinEverHeapFree = (char*)platform_get_last_free_ram( 0 ) - (char*)platform_get_first_free_ram( 0 );
 #endif
-		g_nMaxCDCTxQueue = CDC_txbuff_max();
-		g_nMaxCDCRxQueue = CDC_rxbuff_max();
+#if HAVE_UART1
+		g_nMaxMonTxQueue = UART1_txbuff_max();
+		g_nMaxMonRxQueue = UART1_rxbuff_max();
+#endif
+#if HAVE_USBCDC
+		g_nMaxMonTxQueue = CDC_txbuff_max();
+		g_nMaxMonRxQueue = CDC_rxbuff_max();
+#endif
 		g_nMaxSP0256Queue = SP0256_queue_max();
 		//free stack space measurements
 		g_nMinStackFreeDefault = uxTaskGetStackHighWaterMark ( defaultTaskHandle );

@@ -33,9 +33,14 @@ enum TaskNotificationBits
 	//bits for the default process
 	TNB_LIGHTSCHANGED = 0x00010000,		//the lights have changed
 
-	//bits for the monitor
-	TNB_CLIENT_CONNECT = 0x00010000,	//a client has (probably) connected
-	TNB_CLIENT_DISCONNECT = 0x00020000,	//a client has (probably) disconnected
+	//bits for the monitor; the lower 16 bits are a parameter value for
+	//notifications that take a parameter, so be careful about how you
+	//send these to the Monitor task.
+	TNB_MON_CLIENT_CONNECT = 0x00010000,	//a client has (probably) connected
+	TNB_MON_CLIENT_DISCONNECT = 0x00020000,	//a client has (probably) disconnected
+	TNB_MON_DAV = 0x00040000,	//data is available on the stream
+	TNB_MON_TBMT = 0x00080000,	//transmit buffer is empty on the stream
+	TNB_MON_SETMODE = 0x00100000,	//enter mode specified by lower 16 bits
 
 	//bits for the SP0256 task
 	TNB_LRQ = 0x00010000,		//load request transitioned low (asserted)
