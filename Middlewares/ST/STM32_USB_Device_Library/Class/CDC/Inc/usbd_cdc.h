@@ -112,6 +112,10 @@ typedef struct _USBD_CDC_Itf
 /* USER CODE BEGIN MyCDCExt */
 //hack to help remember to re-apply the hacks when code is regenerated.
 void XXX_USBCDC_PresenceHack ( void );
+//NOTE:  the following optional methods (to be implemented by you) are invoked
+//at ISR time:
+__weak void USBCDC_DTR ( int bAssert );	//*usually* an indication of connection
+__weak void USBCDC_RTS ( int bAssert );
 /* USER CODE END MyCDCExt */
 
 typedef struct

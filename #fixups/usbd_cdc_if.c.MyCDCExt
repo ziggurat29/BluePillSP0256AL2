@@ -25,8 +25,6 @@
 /* USER CODE BEGIN INCLUDE */
 #include "serial_devices.h"
 
-#include "task_monitor.h"
-
 
 //(these are currently internal to serial_devices.c; may get moved out)
 extern size_t XXX_Pull_USBCDC_TxData ( uint8_t* pbyBuffer, const size_t nMax );
@@ -156,6 +154,11 @@ void XXX_USBCDC_PresenceHack ( void )
 	volatile int i = 0;	//thou shalt not optimize away
 	(void)i;	//thou shalt not cry
 }
+
+//these defaults do nothing
+__weak void USBCDC_DTR ( int bAssert ){}
+__weak void USBCDC_RTS ( int bAssert ){}
+
 /* USER CODE END MyCDCExt */
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
@@ -293,26 +296,8 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 			//will assert DTR, so it's not 100% guarantee, just a pretty
 			//good indicator.
 			//NOTE:  we are in an ISR at this time
-			if ( preq->wValue & 1 )	//DTR
-			{	//probable client connecting
-				//We use this opportunity to notify the command processor
-				//task.
-				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-				xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_CONNECT, eSetBits, &xHigherPriorityTaskWoken );
-				portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-			}
-			else
-			{	//probable client disconnecting
-				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-				xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_DISCONNECT, eSetBits, &xHigherPriorityTaskWoken );
-				portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-			}
-			if ( preq->wValue & 2 )	//RTS
-			{
-			}
-			else
-			{
-			}
+			USBCDC_DTR ( preq->wValue & 1 );	//DTR
+			USBCDC_RTS ( preq->wValue & 2 );	//RTS
 		}
 	}
 

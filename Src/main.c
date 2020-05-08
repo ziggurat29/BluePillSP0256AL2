@@ -609,6 +609,48 @@ void __startWorkerTasks ( void )
 
 
 //====================================================
+//miscellaneous hooks of our creation
+
+
+//well-discplined serial clients will assert DTR, and we
+//can use that as an indication that a client application
+//opened the port.
+//NOTE:  These lines are often also set to an initial state
+//by the host's driver, so do not consider these to be
+//exclusively an indication of a client connecting.  Hosts
+//usually will deassert these signals when this device
+//enumerates.  Lastly, there is no guarantee that a client
+//will assert DTR, so it's not 100% guarantee, just a pretty
+//good indicator.
+//NOTE:  we are in an ISR at this time
+
+void USBCDC_DTR ( int bAssert )
+{
+	if ( bAssert )
+	{	//probable client connecting
+		//We use this opportunity to notify the command processor
+		//task.
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_CONNECT, eSetBits, &xHigherPriorityTaskWoken );
+		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+	}
+	else
+	{	//probable client disconnecting
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR ( g_thMonitor, TNB_CLIENT_DISCONNECT, eSetBits, &xHigherPriorityTaskWoken );
+		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+	}
+}
+
+
+
+//unneeded
+//void USBCDC_RTS ( int bAssert ) { }
+
+
+
+//====================================================
+//FreeRTOS hooks
 
 
 
@@ -702,8 +744,10 @@ void StartDefaultTask(void const * argument)
 
 	//================================================
 	//temporary test crap
-	//#doors; Hello.  This was separately text-to-speeched.
 	{
+	volatile size_t nPushed;
+/*
+	//#doors; Hello.  This was separately text-to-speeched.
 	static const uint8_t testcase_001[] = {
 		//"Hello, I love you"
 		0x1B, 0x07, 0x2D, 0x35, 0x03, 0x02, 0x04, 0x17, 0x06, 0x03, 0x02, 0x2D, 0x0F, 0x23, 0x1B, 0x03, 0x02, 0x19, 0x1F, 0x03, 0x02,
@@ -722,7 +766,7 @@ void StartDefaultTask(void const * argument)
 		//"Let me jump in your game"
 		0x2D, 0x07, 0x0D, 0x03, 0x02, 0x10, 0x13, 0x03, 0x02, 0x0A, 0x0F, 0x10, 0x09, 0x03, 0x02, 0x0C, 0x0C, 0x0B, 0x03, 0x02, 0x19, 0x1E, 0x34, 0x03, 0x02, 0x24, 0x14, 0x36, 0x10, 0x03, 0x02,
 	};
-	volatile size_t nPushed = SP0256_push ( testcase_001, COUNTOF(testcase_001) );
+	size_t nPushed = SP0256_push ( testcase_001, COUNTOF(testcase_001) );
 
 	static const uint8_t testcase_002[] = {
 		//"She's walking down the street"
@@ -735,6 +779,7 @@ void StartDefaultTask(void const * argument)
 		0x0D, 0x1F, 0x03, 0x02, 0x10, 0x14, 0x36, 0x2A, 0x03, 0x02, 0x12, 0x13, 0x03, 0x02, 0x08, 0x2E, 0x13, 0x0B, 0x03, 0x02, 0x0F, 0x0F, 0x23, 0x1B, 0x03, 0x02, 0x12, 0x13, 0x03, 0x02, 0x14, 0x36, 0x0B, 0x0A, 0x07, 0x2D, 0x2B, 0x03, 0x02, 0x37, 0x06, 0x03, 0x02, 0x04, 0x04, 0x03, 
 	};
 	nPushed = SP0256_push ( testcase_002, COUNTOF(testcase_002) );
+*/
 /*
 	static const uint8_t testcase_003[] = {
 		//"Hello, I love you"
