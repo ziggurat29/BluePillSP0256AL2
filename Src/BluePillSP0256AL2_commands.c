@@ -39,6 +39,7 @@ static CmdProcRetval cmdhdlDiag ( const IOStreamIF* pio, const char* pszszTokens
 #endif
 
 static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTokens );
+static CmdProcRetval cmdhdlResetSp ( const IOStreamIF* pio, const char* pszszTokens );
 
 
 //the array of command descriptors our application supports
@@ -53,6 +54,7 @@ const CmdProcEntry g_aceCommands[] =
 	{ "diag", cmdhdlDiag, "show diagnostic info (DEBUG build only)" },
 #endif
 	{ "ph", cmdhdlPhoneme, "send phoneme sequence [hex digits]+" },
+	{ "resetsp", cmdhdlResetSp, "reset the SP0256 device" },
 
 	{ "help", cmdhdlHelp, "get help on a command; help [cmd]" },
 };
@@ -695,6 +697,18 @@ static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTok
 		pszPhoneme += 2;
 	}
 
+	CWCMD_SendPrompt ( pio );
+	return CMDPROC_SUCCESS;
+}
+
+
+
+//========================================================================
+//'restsp' command handler
+
+static CmdProcRetval cmdhdlResetSp ( const IOStreamIF* pio, const char* pszszTokens )
+{
+	SP0256_reset();
 	CWCMD_SendPrompt ( pio );
 	return CMDPROC_SUCCESS;
 }
