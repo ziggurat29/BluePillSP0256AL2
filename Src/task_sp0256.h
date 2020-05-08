@@ -39,6 +39,12 @@ size_t SP0256_push ( const uint8_t* abyPhonemes, size_t nSize );
 void SP0256_tbmt ( void );	//the phoneme queue is depleted
 
 
+//these are debug methods for tuning buffer sizes
+#ifdef DEBUG
+unsigned int SP0256_queue_max ( void );
+#endif
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -11,6 +11,8 @@
 
 #include "backup_registers.h"
 
+#include "task_sp0256.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +93,33 @@ static void _cmdPutFloat ( const IOStreamIF* pio, float val )
 	char ach[20];
 	my_ftoa ( ach, val );
 	_cmdPutString ( pio, ach );
+}
+
+
+//simple parser of a hex byte (two chars assumed)
+static uint8_t _parseHexByte ( const char* pszToken )
+{
+	uint8_t val;
+
+	val = 0;
+	for ( int nIter = 0; nIter < 2;  ++nIter )
+	{
+		val <<= 4;
+		if ( *pszToken <= '9' )
+		{
+			val += (*pszToken - '0');
+		}
+		else if ( *pszToken <= 'F' )
+		{
+			val += (*pszToken - 'A' + 10);
+		}
+		else
+		{
+			val += (*pszToken - 'a' + 10);
+		}
+		++pszToken;
+	}
+	return val;
 }
 
 
@@ -448,8 +477,10 @@ extern volatile size_t g_nHeapFree;
 extern volatile size_t g_nMinEverHeapFree;
 extern volatile int g_nMaxCDCTxQueue;
 extern volatile int g_nMaxCDCRxQueue;
+extern volatile int g_nMaxSP0256Queue;
 extern volatile int g_nMinStackFreeDefault;
 extern volatile int g_nMinStackFreeMonitor;
+extern volatile int g_nMinStackFreeSP0256;
 
 #define USE_FREERTOS_HEAP_IMPL 1
 #if USE_FREERTOS_HEAP_IMPL
@@ -486,12 +517,20 @@ static CmdProcRetval cmdhdlDiag ( const IOStreamIF* pio, const char* pszszTokens
 	_cmdPutInt ( pio, g_nMaxCDCTxQueue, 0 );
 	_cmdPutCRLF(pio);
 
+	_cmdPutString ( pio, "SP0256 max queue: " );
+	_cmdPutInt ( pio, g_nMaxSP0256Queue, 0 );
+	_cmdPutCRLF(pio);
+
 	_cmdPutString ( pio, "Task: Default: min stack free: " );
 	_cmdPutInt ( pio, g_nMinStackFreeDefault*sizeof(uint32_t), 0 );
 	_cmdPutCRLF(pio);
 
 	_cmdPutString ( pio, "Task: Monitor: min stack free: " );
 	_cmdPutInt ( pio, g_nMinStackFreeMonitor*sizeof(uint32_t), 0 );
+	_cmdPutCRLF(pio);
+
+	_cmdPutString ( pio, "Task: SP0256: min stack free: " );
+	_cmdPutInt ( pio, g_nMinStackFreeSP0256*sizeof(uint32_t), 0 );
 	_cmdPutCRLF(pio);
 
 #if USE_FREERTOS_HEAP_IMPL

@@ -55,6 +55,7 @@ volatile size_t g_nHeapFree;
 volatile size_t g_nMinEverHeapFree;
 volatile int g_nMaxCDCTxQueue;
 volatile int g_nMaxCDCRxQueue;
+volatile int g_nMaxSP0256Queue;
 volatile int g_nMinStackFreeDefault;
 volatile int g_nMinStackFreeMonitor;
 volatile int g_nMinStackFreeSP0256;
@@ -202,7 +203,11 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
+	//give the task processors an early opportunity to setup any internal
+	//stuff (e.g. FreeRTOS objects, etc.).  In general, we should do this
+	//after the peripherals have been configured.
 	SP0256_Initialize();	//setup whatnot for the SP0256 task processor and reset
+	Monitor_Initialize();	//setup whatnot for the Monitor task
 
   /* USER CODE END 2 */
 
@@ -847,6 +852,7 @@ void StartDefaultTask(void const * argument)
 #endif
 		g_nMaxCDCTxQueue = CDC_txbuff_max();
 		g_nMaxCDCRxQueue = CDC_rxbuff_max();
+		g_nMaxSP0256Queue = SP0256_queue_max();
 		//free stack space measurements
 		g_nMinStackFreeDefault = uxTaskGetStackHighWaterMark ( defaultTaskHandle );
 		g_nMinStackFreeMonitor = uxTaskGetStackHighWaterMark ( g_thMonitor );

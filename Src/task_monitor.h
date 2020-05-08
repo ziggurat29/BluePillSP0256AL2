@@ -19,6 +19,9 @@ extern const IOStreamIF* g_pMonitorIOIf;	//the IO device to which the monitor is
 
 void thrdfxnMonitorTask ( void const* argument );
 
+//called once at reset to get things ready; must be done first
+void Monitor_Initialize ( void );
+
 #ifdef __cplusplus
 }
 #endif

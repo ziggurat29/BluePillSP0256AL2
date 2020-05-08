@@ -95,16 +95,29 @@ void _writeandstrobeSP0256 ( uint8_t nData )
 
 
 
+//these are debug methods for tuning buffer sizes
+#ifdef DEBUG
+
+unsigned int SP0256_queue_max ( void )
+{
+	//(it's not uber critical to take the mutex for this)
+	return circbuff_max ( &SP0256_txbuff );
+}
+
+#endif
+
+
+
 void SP0256_reset()
 {
 	if ( pdTRUE == xSemaphoreTake ( mtxTXbuff, pdMS_TO_TICKS(1000) ) )
 	{
 		circbuff_init ( &SP0256_txbuff );	//clear any pending stuff
 		_strobeSP0256_reset();	//strobe the reset
+		xSemaphoreGive ( mtxTXbuff );
 	}
 	else
 	{}	//horror; timeout taking semaphore
-
 }
 
 

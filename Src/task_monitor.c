@@ -23,6 +23,11 @@ const IOStreamIF* g_pMonitorIOIf = NULL;	//the IO device to which the monitor is
 //serial port.  It processes incoming commands from the user.
 
 
+void Monitor_Initialize ( void )
+{
+	//(XXX nothing yet)
+}
+
 
 //XXX might want to have these direct to whatever device based on config
 void USBCDC_DataAvailable ( void )
