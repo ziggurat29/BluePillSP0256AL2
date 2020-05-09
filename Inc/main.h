@@ -87,6 +87,8 @@ void Error_Handler(void);
 #define SP_nLRQ_Pin GPIO_PIN_11
 #define SP_nLRQ_GPIO_Port GPIOB
 #define SP_nLRQ_EXTI_IRQn EXTI15_10_IRQn
+#define TWIGGLE_Pin GPIO_PIN_8
+#define TWIGGLE_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

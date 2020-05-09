@@ -397,9 +397,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 5;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 1440;
+  htim3.Init.Period = 254;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -422,7 +422,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 128;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
@@ -457,7 +457,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 0;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 6545;
+  htim4.Init.Period = 6530;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -534,7 +534,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, A1_Pin|A2_Pin|A3_Pin|A4_Pin 
-                          |A5_Pin|A6_Pin|SP_RST_Pin, GPIO_PIN_RESET);
+                          |A5_Pin|A6_Pin|SP_RST_Pin|TWIGGLE_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(SP_nALD_GPIO_Port, SP_nALD_Pin, GPIO_PIN_SET);
@@ -555,8 +555,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA7 PA8 PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_15;
+  /*Configure GPIO pins : PA7 PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -587,6 +587,13 @@ static void MX_GPIO_Init(void)
                           |GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : TWIGGLE_Pin */
+  GPIO_InitStruct.Pin = TWIGGLE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(TWIGGLE_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
@@ -789,6 +796,29 @@ void StartDefaultTask(void const * argument)
 	g_pifUART1._transmitCompletely ( &g_pifUART1, "Hi, there!\r\n", 12, 1000 );
 #endif
 
+	//this must be done to get the PWM output started
+	HAL_TIM_Base_Start(&htim3); //Starts the TIM Base generation
+	if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3) != HAL_OK)//Starts the PWM signal generation
+	{
+		/* PWM Generation Error */
+		Error_Handler();
+	}
+
+	//this is how you set the PWM value.  we have already setup for 0-255.
+	//Note that the values in the setup of the timer are +1 values, and
+	//maximums.  So to set up for 0-255 you need to set the reload at 254,
+	//and to divide by 6, you need to select a prescaler of 5.  As such
+	//0 will be low all the time, and 255 will be high all the time.
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 1);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 254);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 255);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 127);
+
+
+	//this must be done to get the sample clock started
+	HAL_TIM_Base_Start_IT(&htim4);
+
 	(void) nPushed;
 	nPushed = 0;	//(just for breakpoint)
 	}
@@ -883,6 +913,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	else if (htim->Instance == TIM4)
 	{
+		//XXX this will eventually become our sample clock
+		HAL_GPIO_TogglePin (TWIGGLE_GPIO_Port, TWIGGLE_Pin);
 	}
 
   /* USER CODE END Callback 1 */
