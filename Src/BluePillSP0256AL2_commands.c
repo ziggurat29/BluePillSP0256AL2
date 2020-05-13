@@ -12,6 +12,8 @@
 #include "backup_registers.h"
 
 #include "task_sp0256.h"
+#include "tts_rules_compact.h"
+#include "text_to_speech.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -39,6 +41,7 @@ static CmdProcRetval cmdhdlDiag ( const IOStreamIF* pio, const char* pszszTokens
 #endif
 
 static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTokens );
+static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens );
 static CmdProcRetval cmdhdlResetSp ( const IOStreamIF* pio, const char* pszszTokens );
 
 
@@ -54,6 +57,7 @@ const CmdProcEntry g_aceCommands[] =
 	{ "diag", cmdhdlDiag, "show diagnostic info (DEBUG build only)" },
 #endif
 	{ "ph", cmdhdlPhoneme, "send phoneme sequence [hex digits]+" },
+	{ "sp", cmdhdlTTS, "do test-to-speech; enclose text in quotes" },
 	{ "resetsp", cmdhdlResetSp, "reset the SP0256 device" },
 
 	{ "help", cmdhdlHelp, "get help on a command; help [cmd]" },
@@ -704,7 +708,104 @@ static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTok
 
 
 //========================================================================
-//'restsp' command handler
+//'sp' command handler
+
+
+static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens )
+{
+	if ( NULL == pszszTokens )
+	{
+		_cmdPutString ( pio, "'sp' requires some text\r\n" );
+		CWCMD_SendPrompt ( pio );
+		return CMDPROC_ERROR;
+	}
+
+
+	//OK, a couple things:  while one is meant to enclose the text in quotation
+	//marks (thereby creating one pszszTokens), someone might not.  We'll text-
+	//to-speech all the tokens just in case.
+	//Also, pluckWord() will indicate if the last character in the buffer is
+	//not a word break character.  This helps when streaming text in, to avoid
+	//prematurely breaking words, however we know that the full line has come
+	//in, so we'll disregard that case and process anyway.
+	//Also, we're meant to only text-to-speech 'normalized' text; i.e. stuff
+	//that has been lower-cased prior to sending to ttsWord().  Normally this
+	//is easy if you're streaming, because you can normalize before you buffer
+	//it, but here the text has all been received.
+	//Lastly, we need a buffer into which to emit phonemes.  Because of all
+	//these concerns, in this case I'm going to use some heap memory for some
+	//temporary storage, rather than the stack or static allocation.  This
+	//command is expected to be used infrequently, for experimental purposes.
+	//We've got a 4 KiB heap; might as well use it for something.
+
+	const char* pszText = pszszTokens;
+	while ( NULL != pszText )
+	{
+		//normalize the text in bulk to lower case
+		int nTextLen = strlen ( pszText );	//cmd line max is 128 chars anyway
+		char* pszNormText = (char*)malloc ( nTextLen + 2 );	//we'll add lf
+		int nIdxText = 0;
+		for ( ; nIdxText < nTextLen; ++nIdxText )
+		{
+			pszNormText[nIdxText] = tolower ( pszText[nIdxText] );
+		}
+		pszNormText[nIdxText++] = '\n';	//just for kicks
+		pszNormText[nIdxText++] = '\0';	//nts
+
+		//make a phoneme buffer; this should be more than enough
+		uint8_t* pbyPhone = (uint8_t*)malloc ( 128 );	//such long words!
+
+		const char* pchWordStart, * pchWordEnd;
+		const char* pszTextCursor = pszNormText;
+		int eCvt;
+		while ( 0 == ( eCvt = pluckWord ( pszTextCursor, nTextLen+1, //(we added lf)
+				&pchWordStart, &pchWordEnd ) ) )
+		{
+			int nWordLen = pchWordEnd - pchWordStart;
+			int nProduced = ttsWord(pchWordStart, nWordLen,
+					g_abyTTS, pbyPhone, 128 );
+			if ( nProduced > 0 )	//if phoneme buffer was too small, tough
+			{
+				//stick on a space between words if there is not already a pause
+				if ( pbyPhone[nProduced-1] > 4 )	//all pauses are code 0 - 4
+				{
+					pbyPhone[nProduced++] = '\x03';
+					pbyPhone[nProduced++] = '\x02';
+				}
+
+				size_t nIdxPhon = 0;
+				size_t nRemaining = nProduced;
+				while ( nRemaining > 0 )
+				{
+					size_t nConsumed = SP0256_push ( &pbyPhone[nIdxPhon], nRemaining );
+					nRemaining -= nConsumed;
+					nIdxPhon += nConsumed;
+					if ( 0 != nRemaining )
+					{
+						osDelay ( 200 );	//sleep a little to let the synth catch up
+					}
+				}
+			}
+
+			//advance
+			nTextLen -= pchWordEnd - pszNormText;
+			pszTextCursor = pchWordEnd;
+		}
+
+		free ( pbyPhone );
+		free ( pszNormText );
+
+		pszText = CMDPROC_nextToken ( pszText );
+	}
+
+	CWCMD_SendPrompt ( pio );
+	return CMDPROC_SUCCESS;
+}
+
+
+
+//========================================================================
+//'resetsp' command handler
 
 static CmdProcRetval cmdhdlResetSp ( const IOStreamIF* pio, const char* pszszTokens )
 {

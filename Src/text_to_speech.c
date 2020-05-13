@@ -269,7 +269,7 @@ int _getRuleSectionLength(const uint8_t* pbyTTSRulesBlob, int nIdxRuleSect)
 }
 
 
-/*
+
 //our definition of a 'compact' rule, which consist of length-prefixed data.
 //the first three are the 'context's and are ASCII text, the last is binary.
 typedef struct TTSRule_compact
@@ -279,7 +279,7 @@ typedef struct TTSRule_compact
 	const uint8_t*	_right;
 	const uint8_t*	_phone;
 } TTSRule_compact;
-*/
+
 
 
 //given the rule blob, section, and index, 'reconstitute' the rule into a

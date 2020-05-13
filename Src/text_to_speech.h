@@ -44,21 +44,6 @@ int ttsWord(const char* pszNormWord, int nWordLen,	//the text
 		uint8_t* pbyPhon, size_t nPhonLen );		//the speech
 
 
-//XXX internal; temporarily exposed for unit testing
-typedef struct TTSRule_compact
-{
-	const uint8_t*	_left;
-	const uint8_t*	_bracket;
-	const uint8_t*	_right;
-	const uint8_t*	_phone;
-} TTSRule_compact;
-int _getRuleSectionLength(const uint8_t* pbyTTSRulesBlob, int nIdxRuleSect);
-void _reconstitute_rule(const uint8_t* pbyTTSRulesBlob,
-		int nIdxRuleSect, int nIdxRule, TTSRule_compact* rule);
-int _transforminput(const char* pszNormWord, size_t nWordLen, size_t nIdxWord,
-		const uint8_t* pbyTTSRulesBlob, int nIdxRuleSect,
-		uint8_t* pbyPhon, int* pnPhonLen);
-
 
 #ifdef __cplusplus
 }
