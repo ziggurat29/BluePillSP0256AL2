@@ -39,6 +39,9 @@
 #include "task_monitor.h"
 #include "task_sp0256.h"
 
+#include "tts_rules_compact.h"	//XXX testing
+#include "text_to_speech.h"	//XXX testing
+
 #include "backup_registers.h"
 
 
@@ -800,10 +803,11 @@ void StartDefaultTask(void const * argument)
 	HAL_TIM_Base_Start(&htim3); //Starts the TIM Base generation
 	if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3) != HAL_OK)//Starts the PWM signal generation
 	{
-		/* PWM Generation Error */
+		//PWM Generation Error
 		Error_Handler();
 	}
 
+/** /
 	//this is how you set the PWM value.  we have already setup for 0-255.
 	//Note that the values in the setup of the timer are +1 values, and
 	//maximums.  So to set up for 0-255 you need to set the reload at 254,
@@ -814,10 +818,79 @@ void StartDefaultTask(void const * argument)
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 254);
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 255);
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 127);
-
+/ **/
 
 	//this must be done to get the sample clock started
 	HAL_TIM_Base_Start_IT(&htim4);
+
+	//nPushed = g_abyTTS[0];	//(just to force hoisting in the blob)
+/** /
+static const char achGettysburg[] = 
+"four score and seven years ago our fathers brought forth on this continent \
+a new nation, conceived in liberty, and dedicated to the proposition that all \
+men are created equal.";
+
+	const char* pszText = achGettysburg;
+	int nTextLen = COUNTOF(achGettysburg);
+
+	//quicky test running through text
+	const char* pchWordStart, * pchWordEnd;
+	int eCvt;
+	while ( 0 == ( eCvt = pluckWord ( pszText, nTextLen, 
+			&pchWordStart, &pchWordEnd ) ) )
+	{
+		int nWordLen = pchWordEnd - pchWordStart;
+
+		static uint8_t sl_abyPhon[256];	//semi-arbitrarily sized loooong word
+
+		int nProduced = ttsWord(pchWordStart, nWordLen,
+				g_abyTTS, sl_abyPhon, COUNTOF(sl_abyPhon) );
+		//stick on a space between words if there is not already a pause
+		if ( sl_abyPhon[nProduced-1] > 4 )	//all pauses are code 0 - 4
+		{
+			sl_abyPhon[nProduced++] = '\x03';
+			sl_abyPhon[nProduced++] = '\x02';
+		}
+
+		size_t nIdxPhon = 0;
+		size_t nRemaining = nProduced;
+		while ( nRemaining > 0 )
+		{
+			size_t nConsumed = SP0256_push ( &sl_abyPhon[nIdxPhon], nRemaining );
+			nRemaining -= nConsumed;
+			nIdxPhon += nConsumed;
+			if ( 0 != nRemaining )
+			{
+				osDelay ( 200 );	//sleep a little to let the synth catch up
+			}
+		}
+
+#if 0
+//spew the conversion out the uart to see what's up
+g_pifUART1._transmitCompletely ( &g_pifUART1, pchWordStart, nWordLen, 1000 );
+g_pifUART1._transmitCompletely ( &g_pifUART1, "\t", 1, 1000 );
+{
+	for ( int nIdx = 0; nIdx < nProduced; ++nIdx )
+	{
+		uint8_t by = sl_abyPhon[nIdx];
+		uint8_t ny = by >> 4;
+		char ch = ny + ( ny < 10 ? '0' : 'a' );
+		g_pifUART1._transmitCompletely ( &g_pifUART1, &ch, 1, 1000 );
+		ny = by & 0x0f;
+		ch = ny + ( ny < 10 ? '0' : 'a'-10 );
+		g_pifUART1._transmitCompletely ( &g_pifUART1, &ch, 1, 1000 );
+
+		g_pifUART1._transmitCompletely ( &g_pifUART1, " ", 1, 1000 );
+	}
+}
+g_pifUART1._transmitCompletely ( &g_pifUART1, "\r\n", 2, 1000 );
+#endif
+
+		//advance
+		nTextLen -= pchWordEnd - pszText;
+		pszText = pchWordEnd;
+	}
+/ **/
 
 	(void) nPushed;
 	nPushed = 0;	//(just for breakpoint)
