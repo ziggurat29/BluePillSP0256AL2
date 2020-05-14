@@ -41,6 +41,7 @@
 
 #include "tts_rules_compact.h"	//XXX testing
 #include "text_to_speech.h"	//XXX testing
+#include "phonemes_adpcm.h"	//XXX testing
 
 #include "backup_registers.h"
 
@@ -891,6 +892,9 @@ g_pifUART1._transmitCompletely ( &g_pifUART1, "\r\n", 2, 1000 );
 		pszText = pchWordEnd;
 	}
 / **/
+
+	//adpcm data tests
+	nPushed = g_apePhonemes[0]._nLenComp;	//(just to force linking the data)
 
 	(void) nPushed;
 	nPushed = 0;	//(just for breakpoint)
