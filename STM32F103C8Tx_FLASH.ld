@@ -63,8 +63,8 @@ MEMORY
 {
 RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 20K
 /* HHH I hacked the size */
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 64K
-/*FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 128K*/
+/*FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 64K*/
+/**/FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 128K/**/
 }
 
 /* Define output sections */
