@@ -35,7 +35,7 @@ typedef struct IOStreamIF
 
 	//transmit/receive methods; blocking
 	//0 on success, nRemaining on timeout (i.e nLen - nProcessed)
-	int (* _transmitCompletely) ( const IOStreamIF* pthis, const void* pv, size_t nLen, uint32_t to );
+	int (* _transmitCompletely) ( const IOStreamIF* pthis, const void* pv, int nLen, uint32_t to );
 	int (* _receiveCompletely) ( const IOStreamIF* pthis, void* pv, const size_t nLen, uint32_t to );
 
 	//(constant) instance data

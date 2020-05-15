@@ -32,15 +32,18 @@
 //The return value is the portion of nLen that has /not/ been processed; so
 //0 means success, and non-zero means failure, and nLen-(return) means how
 //much /was/ processed.
-static int Serial_transmitCompletely ( const IOStreamIF* pcom, const void* pv, size_t nLen, uint32_t to )
+static int Serial_transmitCompletely ( const IOStreamIF* pcom, const void* pv, int nLen, uint32_t to )
 {
 	uint32_t tsStart;
 	size_t nIdxNow;
 	size_t nRemaining;
 	size_t nDone;
-	
+
+	if ( nLen < 0 )
+		nLen = strlen ( pv );
+
 	tsStart = HAL_GetTick();
-	
+
 	nIdxNow = 0;
 	while ( nRemaining = nLen - nIdxNow, 0 != nRemaining )
 	{
