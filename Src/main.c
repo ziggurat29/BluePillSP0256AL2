@@ -355,10 +355,10 @@ static void MX_RTC_Init(void)
   {
     Error_Handler();
   }
-  DateToUpdate.WeekDay = RTC_WEEKDAY_FRIDAY;
-  DateToUpdate.Month = RTC_MONTH_JULY;
-  DateToUpdate.Date = 26;
-  DateToUpdate.Year = 19;
+  DateToUpdate.WeekDay = RTC_WEEKDAY_MONDAY;
+  DateToUpdate.Month = RTC_MONTH_MAY;
+  DateToUpdate.Date = 4;
+  DateToUpdate.Year = 20;
 
   if (HAL_RTC_SetDate(&hrtc, &DateToUpdate, RTC_FORMAT_BIN) != HAL_OK)
   {
@@ -617,7 +617,8 @@ void __startWorkerTasks ( void )
 {
 	//kick off the SP0256 thread, which handles sending phoneme data
 	{
-	osThreadStaticDef(taskSP0256, thrdfxnSP0256Task, osPriorityNormal, 0, COUNTOF(g_tbSP0256), g_tbSP0256, &g_tcbSP0256);
+	//high priority because it keeps the synth pipeline full, especially when simulating
+	osThreadStaticDef(taskSP0256, thrdfxnSP0256Task, osPriorityHigh, 0, COUNTOF(g_tbSP0256), g_tbSP0256, &g_tcbSP0256);
 	g_thSP0256 = osThreadCreate(osThread(taskSP0256), NULL);
 	}
 	//kick off the monitor thread, which handles the user interactions
@@ -782,6 +783,21 @@ void StartDefaultTask(void const * argument)
 #elif HAVE_USBCDC
 	g_pMonitorIOIf = &g_pifCDC;		//monitor is on USB CDC
 #endif
+
+	//this must be done to get the PWM output started
+	HAL_TIM_Base_Start(&htim3); //Starts the TIM Base generation
+	if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3) != HAL_OK)//Starts the PWM signal generation
+	{
+		Error_Handler();	//horror
+	}
+
+	//this period will be like using a color burst xtal instead of the 3.12 MHz
+	//htim4.Instance->ARR = 5692;
+
+	//this must be done to get the sample clock started
+	HAL_TIM_Base_Start_IT(&htim4);
+
+
 	//light some lamps on a countdown
 	LightLamp ( 1000, &g_lltGn, _ledOnGn );
 
@@ -797,104 +813,8 @@ void StartDefaultTask(void const * argument)
 	//the uart1 monitor is for my debugging convenience, but it doesn't have a
 	//'client connected' event, so squirt out a string to make it obvious we
 	//are live
-	g_pifUART1._transmitCompletely ( &g_pifUART1, "Hi, there!\r\n", 12, 1000 );
+	g_pifUART1._transmitCompletely ( &g_pifUART1, "Hi, there!\r\n> ", -1, 1000 );
 #endif
-
-	//this must be done to get the PWM output started
-	HAL_TIM_Base_Start(&htim3); //Starts the TIM Base generation
-	if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3) != HAL_OK)//Starts the PWM signal generation
-	{
-		//PWM Generation Error
-		Error_Handler();
-	}
-
-/** /
-	//this is how you set the PWM value.  we have already setup for 0-255.
-	//Note that the values in the setup of the timer are +1 values, and
-	//maximums.  So to set up for 0-255 you need to set the reload at 254,
-	//and to divide by 6, you need to select a prescaler of 5.  As such
-	//0 will be low all the time, and 255 will be high all the time.
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 1);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 254);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 255);
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 127);
-/ **/
-
-	//this must be done to get the sample clock started
-	HAL_TIM_Base_Start_IT(&htim4);
-
-	//nPushed = g_abyTTS[0];	//(just to force hoisting in the blob)
-/** /
-static const char achGettysburg[] = 
-"four score and seven years ago our fathers brought forth on this continent \
-a new nation, conceived in liberty, and dedicated to the proposition that all \
-men are created equal.";
-
-	const char* pszText = achGettysburg;
-	int nTextLen = COUNTOF(achGettysburg);
-
-	//quicky test running through text
-	const char* pchWordStart, * pchWordEnd;
-	int eCvt;
-	while ( 0 == ( eCvt = pluckWord ( pszText, nTextLen, 
-			&pchWordStart, &pchWordEnd ) ) )
-	{
-		int nWordLen = pchWordEnd - pchWordStart;
-
-		static uint8_t sl_abyPhon[256];	//semi-arbitrarily sized loooong word
-
-		int nProduced = ttsWord(pchWordStart, nWordLen,
-				g_abyTTS, sl_abyPhon, COUNTOF(sl_abyPhon) );
-		//stick on a space between words if there is not already a pause
-		if ( sl_abyPhon[nProduced-1] > 4 )	//all pauses are code 0 - 4
-		{
-			sl_abyPhon[nProduced++] = '\x03';
-			sl_abyPhon[nProduced++] = '\x02';
-		}
-
-		size_t nIdxPhon = 0;
-		size_t nRemaining = nProduced;
-		while ( nRemaining > 0 )
-		{
-			size_t nConsumed = SP0256_push ( &sl_abyPhon[nIdxPhon], nRemaining );
-			nRemaining -= nConsumed;
-			nIdxPhon += nConsumed;
-			if ( 0 != nRemaining )
-			{
-				osDelay ( 200 );	//sleep a little to let the synth catch up
-			}
-		}
-
-#if 0
-//spew the conversion out the uart to see what's up
-g_pifUART1._transmitCompletely ( &g_pifUART1, pchWordStart, nWordLen, 1000 );
-g_pifUART1._transmitCompletely ( &g_pifUART1, "\t", 1, 1000 );
-{
-	for ( int nIdx = 0; nIdx < nProduced; ++nIdx )
-	{
-		uint8_t by = sl_abyPhon[nIdx];
-		uint8_t ny = by >> 4;
-		char ch = ny + ( ny < 10 ? '0' : 'a' );
-		g_pifUART1._transmitCompletely ( &g_pifUART1, &ch, 1, 1000 );
-		ny = by & 0x0f;
-		ch = ny + ( ny < 10 ? '0' : 'a'-10 );
-		g_pifUART1._transmitCompletely ( &g_pifUART1, &ch, 1, 1000 );
-
-		g_pifUART1._transmitCompletely ( &g_pifUART1, " ", 1, 1000 );
-	}
-}
-g_pifUART1._transmitCompletely ( &g_pifUART1, "\r\n", 2, 1000 );
-#endif
-
-		//advance
-		nTextLen -= pchWordEnd - pszText;
-		pszText = pchWordEnd;
-	}
-/ **/
-
-	//adpcm data tests
-	nPushed = g_apePhonemes[0]._nLenComp;	//(just to force linking the data)
 
 	(void) nPushed;
 	nPushed = 0;	//(just for breakpoint)
@@ -990,8 +910,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	else if (htim->Instance == TIM4)
 	{
-		//XXX this will eventually become our sample clock
-		HAL_GPIO_TogglePin (TWIGGLE_GPIO_Port, TWIGGLE_Pin);
+		//notify of sample clock
+		SP0256_GPIO_TIM4_Callback();
 	}
 
   /* USER CODE END Callback 1 */

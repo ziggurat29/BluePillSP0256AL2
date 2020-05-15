@@ -43,7 +43,9 @@ enum TaskNotificationBits
 	TNB_MON_SETMODE = 0x00100000,	//enter mode specified by lower 16 bits
 
 	//bits for the SP0256 task
-	TNB_LRQ = 0x00010000,		//load request transitioned low (asserted)
+	TNB_SP_LRQ = 0x00010000,		//load request transitioned low (asserted)
+	TNB_SP_PREPBUFF = 0x00020000,	//request to prepare a buffer load of samples
+	TNB_SP_DONE = 0x00030000,		//transfer of sample data is fully complete
 };
 
 

@@ -8,7 +8,8 @@ extern "C" {
 #endif
 
 #include "cmsis_os.h"
-#include "task_notification_bits.h"
+#include "BluePillSP0256AL2_settings.h"
+
 
 //FreeRTOS task stuff
 extern osThreadId g_thSP0256;
@@ -25,8 +26,14 @@ void SP0256_Initialize ( void );
 //ISR calls into here when the nLRQ line falls
 void SP0256_GPIO_EXTI_Callback ( uint16_t GPIO_Pin );
 
+//ISR calls into here when TIM4 fires for our sample clock
+void SP0256_GPIO_TIM4_Callback ( void );
+
 
 //the following must NOT be called from ISR due to the use of FreeRTOS mutex
+
+//set the current mode of operation
+void SP0256_setMode ( enum SP0256MODE eSM );
 
 //discard pending and strobe RESET
 void SP0256_reset();
