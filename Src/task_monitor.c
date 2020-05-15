@@ -2,6 +2,7 @@
 
 #include "task_monitor.h"
 #include "command_processor.h"
+#include "task_notification_bits.h"
 #include "BluePillSP0256AL2_commands.h"
 #include "BluePillSP0256AL2_settings.h"
 
