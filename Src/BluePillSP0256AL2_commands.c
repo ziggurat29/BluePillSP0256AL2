@@ -750,6 +750,7 @@ static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens 
 			pszNormText[nIdxText] = tolower ( pszText[nIdxText] );
 		}
 		pszNormText[nIdxText++] = '\n';	//just for kicks
+		nTextLen = nIdxText;
 		pszNormText[nIdxText++] = '\0';	//nts
 
 		//make a phoneme buffer; this should be more than enough
@@ -758,7 +759,7 @@ static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens 
 		const char* pchWordStart, * pchWordEnd;
 		const char* pszTextCursor = pszNormText;
 		int eCvt;
-		while ( 0 == ( eCvt = pluckWord ( pszTextCursor, nTextLen+1, //(we added lf)
+		while ( 0 == ( eCvt = pluckWord ( pszTextCursor, nTextLen, 
 				&pchWordStart, &pchWordEnd ) ) )
 		{
 			int nWordLen = pchWordEnd - pchWordStart;
@@ -788,7 +789,7 @@ static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens 
 			}
 
 			//advance
-			nTextLen -= pchWordEnd - pszNormText;
+			nTextLen -= pchWordEnd - pszTextCursor;
 			pszTextCursor = pchWordEnd;
 		}
 
