@@ -335,7 +335,7 @@ static CmdProcRetval cmdhdlHelp ( const IOStreamIF* pio, const char* pszszTokens
 
 static CmdProcRetval cmdhdlSet ( const IOStreamIF* pio, const char* pszszTokens )
 {
-	//PersistentSettings* psettings = Settings_getStruct();
+	PersistentSettings* psettings = Settings_getStruct();
 
 	const char* pszSetting = pszszTokens;
 	if ( NULL == pszSetting )
@@ -370,12 +370,42 @@ static CmdProcRetval cmdhdlSet ( const IOStreamIF* pio, const char* pszszTokens 
 			HAL_RTC_GetAlarm(&hrtc, &sAlarm, RTC_ALARM_A, RTC_FORMAT_BIN);
 			//(no alarm reads as 06:28:15)
 
-			_cmdPutString ( pio, ", next scheduled check at: " );
+			_cmdPutString ( pio, ", next scheduled alarm at: " );
 			_cmdPutInt ( pio, sAlarm.AlarmTime.Hours, 2 );
 			_cmdPutChar ( pio, ':' );
 			_cmdPutInt ( pio, sAlarm.AlarmTime.Minutes, 2 );
 			_cmdPutChar ( pio, ':' );
 			_cmdPutInt ( pio, sAlarm.AlarmTime.Seconds, 2 );
+
+			_cmdPutCRLF(pio);
+		}
+
+		//show current monitor mode
+		_cmdPutString ( pio, "mmode:  " );
+		switch ( psettings->_eMM )
+		{
+			case MM_CMD:
+				_cmdPutString ( pio, "command" );
+				break;
+			case MM_BRIDGE:
+				_cmdPutString ( pio, "bridge" );
+				break;
+			case MM_TTS:
+				_cmdPutString ( pio, "tts" );
+				break;
+		}
+		_cmdPutCRLF(pio);
+
+		//show current speech processor mode
+		_cmdPutString ( pio, "spmode:  " );
+		switch ( psettings->_eSM )
+		{
+			case SM_PHYSICAL:
+				_cmdPutString ( pio, "physical" );
+				break;
+			case SM_SIMULATED:
+				_cmdPutString ( pio, "simulated" );
+				break;
 		}
 		_cmdPutCRLF(pio);
 
@@ -420,6 +450,58 @@ static CmdProcRetval cmdhdlSet ( const IOStreamIF* pio, const char* pszszTokens 
 			_setTime ( pio, pszTime );
 		}
 	}
+
+	else if ( 0 == strcmp ( "mmode", pszSetting ) )
+	{
+		//we'll just check the first character for simplicity
+		if ( 'C' == *pszValue || 'c' == *pszValue )
+		{
+			psettings->_eMM = MM_CMD;
+//XXX III
+		}
+		else if ( 'B' == *pszValue || 'b' == *pszValue )
+		{
+			psettings->_eMM = MM_BRIDGE;
+//XXX III
+		}
+		else if ( 'T' == *pszValue || 't' == *pszValue )
+		{
+			psettings->_eMM = MM_TTS;
+//XXX III
+		}
+		else
+		{
+			_cmdPutString ( pio, "unrecognized mode'" );
+			_cmdPutString ( pio, pszValue );
+			_cmdPutString ( pio, "'\r\n" );
+			CWCMD_SendPrompt ( pio );
+			return CMDPROC_ERROR;
+		}
+	}
+
+	else if ( 0 == strcmp ( "spmode", pszSetting ) )
+	{
+		//we'll just check the first character for simplicity
+		if ( 'P' == *pszValue || 'p' == *pszValue )
+		{
+			psettings->_eSM = SM_PHYSICAL;
+			SP0256_setMode ( psettings->_eSM );
+		}
+		else if ( 'S' == *pszValue || 's' == *pszValue )
+		{
+			psettings->_eSM = SM_SIMULATED;
+			SP0256_setMode ( psettings->_eSM );
+		}
+		else
+		{
+			_cmdPutString ( pio, "unrecognized mode'" );
+			_cmdPutString ( pio, pszValue );
+			_cmdPutString ( pio, "'\r\n" );
+			CWCMD_SendPrompt ( pio );
+			return CMDPROC_ERROR;
+		}
+	}
+
 	else
 	{
 		_cmdPutString ( pio, "error:  the setting " );

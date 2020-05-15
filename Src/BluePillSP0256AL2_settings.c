@@ -196,6 +196,7 @@ const PersistentSettings g_defaultSettings =
 	._version = PERSET_VERSION,	//must be this
 
 	._eMM = MM_CMD,
+	._eSM = SM_PHYSICAL,
 };
 
 

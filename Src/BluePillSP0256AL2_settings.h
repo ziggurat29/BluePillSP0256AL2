@@ -27,6 +27,11 @@ enum MONMODE {		//mode of the monitor task
 	MM_TTS = 2,		//2 == text-to-speech mode
 };
 
+enum SP0256MODE {	//mode of the SP0256 task
+	SM_PHYSICAL = 0,	//0 == physical sp0256 is present (default)
+	SM_SIMULATED = 1,	//1 == simulated sp0256
+};
+
 
 
 //The persistent settings are stored in the last flash page.  It is simply a
@@ -46,6 +51,7 @@ typedef struct
 	uint32_t	_version;	//should always be first, should be PERSET_VERSION
 
 	enum MONMODE	_eMM;	//the operational mode of the monitor
+	enum SP0256MODE	_eSM;	//the mode of the SP0256 interface
 } PersistentSettings;
 
 
