@@ -27,7 +27,14 @@ void SP0256_Initialize ( void );
 void SP0256_GPIO_EXTI_Callback ( uint16_t GPIO_Pin );
 
 //ISR calls into here when TIM4 fires for our sample clock
-void SP0256_GPIO_TIM4_Callback ( void );
+void SP0256_TIM4_Callback ( void );
+
+//ISR calls into here when DMA is half-complete
+void SP0256_DMA_1_7_HALFCPL_Callback ( void );
+
+//ISR calls into here when DMA is fully complete
+void SP0256_DMA_1_7_CPL_Callback ( void );
+
 
 
 //the following must NOT be called from ISR due to the use of FreeRTOS mutex

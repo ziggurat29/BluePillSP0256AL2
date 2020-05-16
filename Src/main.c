@@ -123,6 +123,7 @@ RTC_HandleTypeDef hrtc;
 
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+DMA_HandleTypeDef hdma_tim4_up;
 
 UART_HandleTypeDef huart1;
 
@@ -136,6 +137,7 @@ osStaticThreadDef_t defaultTaskControlBlock;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
@@ -205,6 +207,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_RTC_Init();
   MX_TIM3_Init();
   MX_TIM4_Init();
@@ -518,6 +521,22 @@ static void MX_USART1_UART_Init(void)
 
 }
 
+/** 
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void) 
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel7_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
+
+}
+
 /**
   * @brief GPIO Initialization Function
   * @param None
@@ -747,6 +766,37 @@ void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 
 
 
+//====================================================
+//DMA support
+//	The DMA1 channel 7 is attached to the TIM4 'update' (i.e. rollover) action,
+//and we use that to clock out our samples.  The DMA will directly fetch byte
+//samples from memory and push them into the TIM3 CCR3 register to achieve PWM
+//clocked at the TIM4 rate.
+
+
+void HAL_DMA_CB_XferCpl(DMA_HandleTypeDef* hdma)
+{
+	SP0256_DMA_1_7_CPL_Callback();	//we need to be fed
+}
+
+void HAL_DMA_CB_HalfCpl(DMA_HandleTypeDef* hdma)
+{
+	SP0256_DMA_1_7_HALFCPL_Callback();	//we need to prepare a buffer
+}
+
+
+void HAL_DMA_CB_Error(DMA_HandleTypeDef* hdma)
+{
+	//(we're not using this)
+}
+
+void HAL_DMA_CB_Abort(DMA_HandleTypeDef* hdma)
+{
+	//(we're not using this)
+}
+
+
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -795,7 +845,15 @@ void StartDefaultTask(void const * argument)
 	//htim4.Instance->ARR = 5692;
 
 	//this must be done to get the sample clock started
-	HAL_TIM_Base_Start_IT(&htim4);
+	HAL_TIM_Base_Start(&htim4);			//for DMA driven I/O (don't need the interrupt)
+
+	//register DMA callbacks
+	HAL_DMA_RegisterCallback(&hdma_tim4_up, HAL_DMA_XFER_CPLT_CB_ID, HAL_DMA_CB_XferCpl);
+	HAL_DMA_RegisterCallback(&hdma_tim4_up, HAL_DMA_XFER_HALFCPLT_CB_ID, HAL_DMA_CB_HalfCpl);
+	HAL_DMA_RegisterCallback(&hdma_tim4_up, HAL_DMA_XFER_ERROR_CB_ID, HAL_DMA_CB_Error);
+	HAL_DMA_RegisterCallback(&hdma_tim4_up, HAL_DMA_XFER_ABORT_CB_ID, HAL_DMA_CB_Abort);
+
+	__HAL_TIM_ENABLE_DMA ( &htim4, TIM_DMA_UPDATE );	//'updates' (rollover) cause DMA
 
 
 	//light some lamps on a countdown
@@ -907,13 +965,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
+/*we're not doing ISR sample clock anymore, but I'm leaving this here for posterity
 	else if (htim->Instance == TIM4)
 	{
 		//notify of sample clock
-		SP0256_GPIO_TIM4_Callback();
+		SP0256_TIM4_Callback();
 	}
-
+*/
   /* USER CODE END Callback 1 */
 }
 

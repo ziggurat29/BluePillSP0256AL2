@@ -16,6 +16,7 @@
 
 extern TIM_HandleTypeDef htim3;	//for PWM
 extern TIM_HandleTypeDef htim4;	//for sample clock
+extern DMA_HandleTypeDef hdma_tim4_up;	//for the DMA sample driver
 
 
 
@@ -159,11 +160,12 @@ int g_idxPhoneNyb = 0;	//our current nybble
 
 
 //our phoneme fifo
-CIRCBUF(g_SP0256_fifo,uint8_t,4);
+CIRCBUF(g_SP0256_fifo,uint8_t,16);
 
 
 
-void SP0256_GPIO_TIM4_Callback ( void )
+//this callback is used only when we are timer interrupt driven
+void SP0256_TIM4_Callback ( void )
 {
 	//if we are simulating, and we have samples, send it out
 
@@ -197,7 +199,6 @@ void SP0256_GPIO_TIM4_Callback ( void )
 		if ( g_nActive >= COUNTOF(g_asb) )	//wrap
 			g_nActive = 0;
 		--g_nUsed;	//one down
-		pbuff = &g_asb[g_nActive];
 
 		if ( 0 == g_nUsed )	//now no buffers in use? xfer complete
 		{
@@ -215,13 +216,65 @@ void SP0256_GPIO_TIM4_Callback ( void )
 
 
 
+//these callbacks are used only when we are DMA drive
+void SP0256_DMA_1_7_HALFCPL_Callback ( void )
+{
+	if ( NULL != g_thSP0256 )	//(can get some strays during boot before we have a task)
+	{
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR ( g_thSP0256, TNB_SP_PREPBUFF, eSetBits, &xHigherPriorityTaskWoken );
+		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+	}
+}
+
+
+
+//these callbacks are used only when we are DMA drive
+void SP0256_DMA_1_7_CPL_Callback ( void )
+{
+	UBaseType_t uxSavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
+
+	SampleBuffer* pbuff = &g_asb[g_nActive];	//get this (completed) buffer
+
+	//set this buffer as empty
+	pbuff->_len = 0;
+	pbuff->_idx = 0;
+	g_nActive += 1;	//next buffer
+	if ( g_nActive >= COUNTOF(g_asb) )	//wrap
+		g_nActive = 0;
+	--g_nUsed;	//one down
+
+	if ( 0 == g_nUsed )	//now no buffers in use? xfer complete
+	{
+		if ( NULL != g_thSP0256 )	//(can get some strays during boot before we have a task)
+		{
+			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+			xTaskNotifyFromISR ( g_thSP0256, TNB_SP_DONE, eSetBits, &xHigherPriorityTaskWoken );
+			portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+		}
+	}
+	else
+	{
+		pbuff = &g_asb[g_nActive];	//get the next buffer
+		HAL_DMA_Start_IT(&hdma_tim4_up, 
+				(uint32_t)&(pbuff->_abySamples), 
+				(uint32_t)&htim3.Instance->CCR3, 
+				pbuff->_len);
+		//XXX required? __HAL_TIM_ENABLE_DMA ( &htim4, TIM_DMA_UPDATE );
+	}
+
+	taskEXIT_CRITICAL_FROM_ISR(uxSavedInterruptStatus);
+}
+
+
+
 
 //_prepareNextBufferLoad
 //would it be smarter to instead mask the interrupt source from the sample driver?
 //	taskENTER_CRITICAL();
 //	taskEXIT_CRITICAL();
 //HAL_NVIC_EnableIRQ(TIM4_IRQn);
-//__HAL_TIM_ENABLE_IT(htim, TIM_IT_UPDATE);
+//__HAL_TIM_ENABLE_IT(htim4, TIM_IT_UPDATE);
 //#define __HAL_TIM_ENABLE_IT(__HANDLE__, __INTERRUPT__)    ((__HANDLE__)->Instance->DIER |= (__INTERRUPT__))
 //#define __HAL_TIM_DISABLE_IT(__HANDLE__, __INTERRUPT__)   ((__HANDLE__)->Instance->DIER &= ~(__INTERRUPT__))
 
@@ -316,8 +369,16 @@ void _prepareNextBufferLoad ( void )
 	taskENTER_CRITICAL();
 	if ( bDidFill )
 	{
-		//if ( 0 == g_nUsed )
-			//XXX prime the pump?
+		if ( 0 == g_nUsed )
+		{
+			//must prime the pump
+			g_nActive = nNext;
+			HAL_DMA_Start_IT(&hdma_tim4_up, 
+					(uint32_t)&(g_asb[g_nActive]._abySamples), 
+					(uint32_t)&htim3.Instance->CCR3, 
+					g_asb[g_nActive]._len);
+			//XXX required? __HAL_TIM_ENABLE_DMA ( &htim4, TIM_DMA_UPDATE );
+		}
 		++g_nUsed;
 	}
 	taskEXIT_CRITICAL();
@@ -330,6 +391,11 @@ void _strobeReset_simulated ( void )
 {
 	//abort any PWM, dump any buffer, return PWM to '0' (128)
 	taskENTER_CRITICAL();
+
+	//XXX required? __HAL_TIM_DISABLE_DMA ( &htim4, TIM_DMA_UPDATE );	//stop triggering DMA
+	HAL_DMA_Abort_IT(&hdma_tim4_up);	//stop DMA'ing (and unlock DMA)
+	//XXX required? HAL_TIM_Base_Stop(&htim4);	//stop clocking
+
 	g_asb[0]._len = 0;	//'empty' our buffers
 	g_asb[0]._idx = 0;	//arbitrarily reset
 	g_asb[1]._len = 0;
