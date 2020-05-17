@@ -7,7 +7,7 @@
 #include "util_circbuff2.h"
 #include "util_altlib.h"
 
-#include "phonemes_adpcm.h"
+#include "phonemes_adpcm_11025.h"
 #include "adpcm.h"
 
 #include "task_notification_bits.h"
@@ -307,7 +307,7 @@ void _prepareNextBufferLoad ( void )
 		if ( g_phone >= 0 )
 		{
 			//decompress this phoneme as much as possible
-			const struct PhonemeEntry* ppe = &g_apePhonemes[g_phone];
+			const struct PhonemeEntry* ppe = &g_apePhonemes_11025[g_phone];
 			while ( pbuff->_len < COUNTOF(pbuff->_abySamples) )
 			{
 				int code = ppe->_pbyADPCM[g_idxPhoneNyb>>1];

@@ -41,7 +41,7 @@
 
 #include "tts_rules_compact.h"	//XXX testing
 #include "text_to_speech.h"	//XXX testing
-#include "phonemes_adpcm.h"	//XXX testing
+#include "phonemes_adpcm_11025.h"	//XXX testing
 
 #include "backup_registers.h"
 
