@@ -11,8 +11,10 @@
 #include "main.h"
 #include "stm32f1xx_hal.h"
 #include "cmsis_os.h"
+#if HAVE_USBCDC
 #include "usb_device.h"
 #include "usbd_cdc_if.h"
+#endif
 
 #include "lamps.h"
 

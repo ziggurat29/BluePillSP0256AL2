@@ -26,7 +26,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#if HAVE_USBCDC
 #include "usbd_cdc.h"	//just for the XXX_USBCDC_PresenceHack()
+#endif
 #include "system_interfaces.h"
 #include "serial_devices.h"
 #include "util_circbuff2.h"
@@ -174,6 +176,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+#if HAVE_USBCDC
 	//if you get a linker fail on the following, it is because some manual
 	//changes to:
 	//  .\Middlewares\ST\STM32_USB_Device_Library\Class\CDC\Inc\usbd_cdc.h
@@ -189,6 +192,7 @@ int main(void)
 	//Sorry for the inconvenience, but I don't think there is any better way
 	//of making it obvious that this chore simply must be done.
 	XXX_USBCDC_PresenceHack();	//this does nothing real; do not delete
+#endif
 
   /* USER CODE END Init */
 
