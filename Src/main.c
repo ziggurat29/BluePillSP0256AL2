@@ -41,10 +41,6 @@
 #include "task_monitor.h"
 #include "task_sp0256.h"
 
-#include "tts_rules_compact.h"	//XXX testing
-#include "text_to_speech.h"	//XXX testing
-#include "phonemes_adpcm_11025.h"	//XXX testing
-
 #include "backup_registers.h"
 
 
@@ -468,7 +464,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 0;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 6530;
+  htim4.Init.Period = 8999;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -846,7 +842,11 @@ void StartDefaultTask(void const * argument)
 	}
 
 	//this period will be like using a color burst xtal instead of the 3.12 MHz
-	//htim4.Instance->ARR = 5692;
+	//htim4.Instance->ARR = 5692;	//for the 11025 sampling rate
+	//htim4.Instance->ARR = 7844;	//for the 8000 sampling rate
+	//this period will be like using a 4.0 MHZ xtal instead of the 3.12 MHz
+	//htim4.Instance->ARR = 5053;	//for the 11025 sampling rate
+	//htim4.Instance->ARR = 7020;	//for the 8000 sampling rate
 
 	//this must be done to get the sample clock started
 	HAL_TIM_Base_Start(&htim4);			//for DMA driven I/O (don't need the interrupt)
