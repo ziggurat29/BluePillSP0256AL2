@@ -41,6 +41,7 @@ static CmdProcRetval cmdhdlDiag ( const IOStreamIF* pio, const char* pszszTokens
 #endif
 
 static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTokens );
+static CmdProcRetval cmdhdlSpeak ( const IOStreamIF* pio, const char* pszszTokens );
 static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens );
 static CmdProcRetval cmdhdlResetSp ( const IOStreamIF* pio, const char* pszszTokens );
 
@@ -57,7 +58,8 @@ const CmdProcEntry g_aceCommands[] =
 	{ "diag", cmdhdlDiag, "show diagnostic info (DEBUG build only)" },
 #endif
 	{ "ph", cmdhdlPhoneme, "send phoneme sequence [hex digits]+" },
-	{ "sp", cmdhdlTTS, "do test-to-speech; enclose text in quotes" },
+	{ "sp", cmdhdlSpeak, "do test-to-speech; enclose text in quotes" },
+	{ "tts", cmdhdlTTS, "do diagnostic text-to-speech; dump generated phoneme sequence" },
 	{ "resetsp", cmdhdlResetSp, "reset the SP0256 device" },
 
 	{ "help", cmdhdlHelp, "get help on a command; help [cmd]" },
@@ -793,7 +795,7 @@ static CmdProcRetval cmdhdlPhoneme ( const IOStreamIF* pio, const char* pszszTok
 //'sp' command handler
 
 
-static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens )
+static CmdProcRetval cmdhdlSpeak ( const IOStreamIF* pio, const char* pszszTokens )
 {
 	if ( NULL == pszszTokens )
 	{
@@ -880,6 +882,111 @@ static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens 
 
 		pszText = CMDPROC_nextToken ( pszText );
 	}
+
+	CWCMD_SendPrompt ( pio );
+	return CMDPROC_SUCCESS;
+}
+
+
+
+//========================================================================
+//'tts' command handler
+//This is a debugging/diagnostic command that works like 'sp', except we just
+//dump what we calculate instead of actually synthesizing anything.
+
+//(declaring like this saves half the memory)
+const char g_aszPhonemeNames[64][4] = {
+"PA1", "PA2", "PA3", "PA4", "PA5", "OY",  "AY",  "EH",  
+"KK3", "PP",  "JH",  "NN1", "IH",  "TT2", "RR1", "AX",  
+"MM",  "TT1", "DH1", "IY",  "EY",  "DD1", "UW1", "AO",  
+"AA",  "YY2", "AE",  "HH1", "BB1", "TH",  "UH",  "UW2", 
+"AW",  "DD2", "GG3", "VV",  "GG1", "SH",  "ZH",  "RR2", 
+"FF",  "KK2", "KK1", "ZZ",  "NG",  "LL",  "WW",  "XR",  
+"WH",  "YY1", "CH",  "ER1", "ER2", "OW",  "DH2", "SS",  
+"NN2", "HH2", "OR",  "AR",  "YR",  "GG2", "EL",  "BB2", 
+};
+
+
+static CmdProcRetval cmdhdlTTS ( const IOStreamIF* pio, const char* pszszTokens )
+{
+	if ( NULL == pszszTokens )
+	{
+		_cmdPutString ( pio, "'tts' requires some text\r\n" );
+		CWCMD_SendPrompt ( pio );
+		return CMDPROC_ERROR;
+	}
+
+	//this is pretty much the same loop as above except that we output the
+	//results back to the console instead of synthesizing.
+	const char* pszText = pszszTokens;
+	while ( NULL != pszText )
+	{
+		//normalize the text in bulk to lower case
+		int nTextLen = strlen ( pszText );	//cmd line max is 128 chars anyway
+		char* pszNormText = (char*)malloc ( nTextLen + 2 );	//we'll add lf
+		int nIdxText = 0;
+		for ( ; nIdxText < nTextLen; ++nIdxText )
+		{
+			pszNormText[nIdxText] = tolower ( pszText[nIdxText] );
+		}
+		pszNormText[nIdxText++] = '\n';	//just for kicks
+		nTextLen = nIdxText;
+		pszNormText[nIdxText++] = '\0';	//nts
+
+		//make a phoneme buffer; this should be more than enough
+		uint8_t* pbyPhone = (uint8_t*)malloc ( 128 );	//such long words!
+
+		const char* pchWordStart, * pchWordEnd;
+		const char* pszTextCursor = pszNormText;
+		int eCvt;
+		while ( 0 == ( eCvt = pluckWord ( pszTextCursor, nTextLen, 
+				&pchWordStart, &pchWordEnd ) ) )
+		{
+			int nWordLen = pchWordEnd - pchWordStart;
+			int nProduced = ttsWord(pchWordStart, nWordLen,
+					g_abyTTS, pbyPhone, 128 );
+			if ( nProduced > 0 )	//if phoneme buffer was too small, tough
+			{
+				//stick on a space between words if there is not already a pause
+				if ( pbyPhone[nProduced-1] > 4 )	//all pauses are code 0 - 4
+				{
+					pbyPhone[nProduced++] = '\x03';
+					pbyPhone[nProduced++] = '\x02';
+				}
+
+				//this is the different part
+				//emit word
+				pio->_transmitCompletely ( pio, pchWordStart, nWordLen, TO_INFINITY );
+				_cmdPutString ( pio, "  " );
+				//emit hex
+				for ( int nIdx = 0; nIdx < nProduced; ++nIdx )
+				{
+					_cmdPutChar ( pio, _nybbleToChar ( pbyPhone[nIdx] >> 4 ) );
+					_cmdPutChar ( pio, _nybbleToChar ( pbyPhone[nIdx] & 0x0f ) );
+					_cmdPutChar ( pio, ' ' );
+				}
+				_cmdPutCRLF ( pio );
+				//emit friendly phoneme names
+				_cmdPutString ( pio, "  " );
+				for ( int nIdx = 0; nIdx < nProduced; ++nIdx )
+				{
+					_cmdPutString ( pio, g_aszPhonemeNames[pbyPhone[nIdx]] );
+					_cmdPutChar ( pio, ' ' );
+				}
+				_cmdPutCRLF ( pio );
+			}
+
+			//advance
+			nTextLen -= pchWordEnd - pszTextCursor;
+			pszTextCursor = pchWordEnd;
+		}
+
+		free ( pbyPhone );
+		free ( pszNormText );
+
+		pszText = CMDPROC_nextToken ( pszText );
+	}
+
 
 	CWCMD_SendPrompt ( pio );
 	return CMDPROC_SUCCESS;
