@@ -924,8 +924,7 @@ void StartDefaultTask(void const * argument)
 #if HAVE_UART1
 		g_nMaxMonTxQueue = UART1_txbuff_max();
 		g_nMaxMonRxQueue = UART1_rxbuff_max();
-#endif
-#if HAVE_USBCDC
+#elif HAVE_USBCDC
 		g_nMaxMonTxQueue = CDC_txbuff_max();
 		g_nMaxMonRxQueue = CDC_rxbuff_max();
 #endif
