@@ -7,7 +7,7 @@ extern "C" {
 
 #include <stdint.h>
 
-extern const uint8_t g_abyTTS[9385];
+extern const uint8_t g_abyTTS[9383];
 
 #ifdef __cplusplus
 }
