@@ -177,8 +177,8 @@
 								<option id="gnu.c.compiler.option.preprocessor.def.symbols.1420522721" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__weak=__attribute__((weak))"/>
 									<listOptionValue builtIn="false" value="__packed=__attribute__((__packed__))"/>
-									<listOptionValue builtIn="false" value="DEBUG=1"/>
-									<listOptionValue builtIn="false" value="HAVE_UART1=1"/>
+									<listOptionValue builtIn="false" value="NDEBUG=1"/>
+									<listOptionValue builtIn="false" value="HAVE_UART1=0"/>
 									<listOptionValue builtIn="false" value="HAVE_USBCDC=1"/>
 									<listOptionValue builtIn="false" value="USE_HAL_DRIVER"/>
 									<listOptionValue builtIn="false" value="STM32F103xB"/>
@@ -266,7 +266,7 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
 		<configuration configurationName="Debug">
-			<resource resourceType="PROJECT" workspacePath="BluePillSP0256AL2"/>
+			<resource resourceType="PROJECT" workspacePath="/BluePillSP0256AL2"/>
 		</configuration>
 		<configuration configurationName="Release"/>
 	</storageModule>
