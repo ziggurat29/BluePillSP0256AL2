@@ -1,71 +1,29 @@
 /*
-    FreeRTOS V9.0.0 - Copyright (C) 2016 Real Time Engineers Ltd.
-    All rights reserved
-
-    VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
-
-    This file is part of the FreeRTOS distribution.
-
-    FreeRTOS is free software; you can redistribute it and/or modify it under
-    the terms of the GNU General Public License (version 2) as published by the
-    Free Software Foundation >>>> AND MODIFIED BY <<<< the FreeRTOS exception.
-
-    ***************************************************************************
-    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
-    >>!   distribute a combined work that includes FreeRTOS without being   !<<
-    >>!   obliged to provide the source code for proprietary components     !<<
-    >>!   outside of the FreeRTOS kernel.                                   !<<
-    ***************************************************************************
-
-    FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
-    WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-    FOR A PARTICULAR PURPOSE.  Full license text is available on the following
-    link: http://www.freertos.org/a00114.html
-
-    ***************************************************************************
-     *                                                                       *
-     *    FreeRTOS provides completely free yet professionally developed,    *
-     *    robust, strictly quality controlled, supported, and cross          *
-     *    platform software that is more than just the market leader, it     *
-     *    is the industry's de facto standard.                               *
-     *                                                                       *
-     *    Help yourself get started quickly while simultaneously helping     *
-     *    to support the FreeRTOS project by purchasing a FreeRTOS           *
-     *    tutorial book, reference manual, or both:                          *
-     *    http://www.FreeRTOS.org/Documentation                              *
-     *                                                                       *
-    ***************************************************************************
-
-    http://www.FreeRTOS.org/FAQHelp.html - Having a problem?  Start by reading
-    the FAQ page "My application does not run, what could be wrong?".  Have you
-    defined configASSERT()?
-
-    http://www.FreeRTOS.org/support - In return for receiving this top quality
-    embedded software for free we request you assist our global community by
-    participating in the support forum.
-
-    http://www.FreeRTOS.org/training - Investing in training allows your team to
-    be as productive as possible as early as possible.  Now you can receive
-    FreeRTOS training directly from Richard Barry, CEO of Real Time Engineers
-    Ltd, and the world's leading authority on the world's leading RTOS.
-
-    http://www.FreeRTOS.org/plus - A selection of FreeRTOS ecosystem products,
-    including FreeRTOS+Trace - an indispensable productivity tool, a DOS
-    compatible FAT file system, and our tiny thread aware UDP/IP stack.
-
-    http://www.FreeRTOS.org/labs - Where new FreeRTOS products go to incubate.
-    Come and try FreeRTOS+TCP, our new open source TCP/IP stack for FreeRTOS.
-
-    http://www.OpenRTOS.com - Real Time Engineers ltd. license FreeRTOS to High
-    Integrity Systems ltd. to sell under the OpenRTOS brand.  Low cost OpenRTOS
-    licenses offer ticketed support, indemnification and commercial middleware.
-
-    http://www.SafeRTOS.com - High Integrity Systems also provide a safety
-    engineered and independently SIL3 certified version for use in safety and
-    mission critical applications that require provable dependability.
-
-    1 tab == 4 spaces!
-*/
+ * FreeRTOS Kernel V10.2.1
+ * Copyright (C) 2019 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * http://www.FreeRTOS.org
+ * http://aws.amazon.com/freertos
+ *
+ * 1 tab == 4 spaces!
+ */
 
 /*
  * A sample implementation of pvPortMalloc() and vPortFree() that combines
@@ -153,12 +111,24 @@ static size_t xBlockAllocatedBit = 0;
 
 /*-----------------------------------------------------------*/
 
+#if 1
+//this way should work from ISR also
+#define ENTER_MALLOC_CRITICAL taskENTER_CRITICAL_FROM_ISR()
+#define EXIT_MALLOC_CRITICAL(a) taskEXIT_CRITICAL_FROM_ISR(a)
+#else
+//this was the original way, but will lock up if used from ISR on FreeRTOS 10 or os
+#define ENTER_MALLOC_CRITICAL (vTaskSuspendAll(), 0)
+#define EXIT_MALLOC_CRITICAL(a) xTaskResumeAll()
+#endif
+
+
+
 void *pvPortMalloc( size_t xWantedSize )
 {
 BlockLink_t *pxBlock, *pxPreviousBlock, *pxNewBlockLink;
 void *pvReturn = NULL;
 
-	vTaskSuspendAll();
+	UBaseType_t savemask = ENTER_MALLOC_CRITICAL;
 	{
 		/* If this is the first call to malloc then the heap will require
 		initialisation to setup the list of free blocks. */
@@ -287,11 +257,11 @@ void *pvReturn = NULL;
 
 		traceMALLOC( pvReturn, xWantedSize );
 	}
-	( void ) xTaskResumeAll();
+	EXIT_MALLOC_CRITICAL(savemask);
 
 	#if( configUSE_MALLOC_FAILED_HOOK == 1 )
 	{
-		if( pvReturn == NULL )
+		if( pvReturn == NULL && 0 != xWantedSize )
 		{
 			extern void vApplicationMallocFailedHook( void );
 			vApplicationMallocFailedHook();
@@ -334,14 +304,14 @@ BlockLink_t *pxLink;
 				allocated. */
 				pxLink->xBlockSize &= ~xBlockAllocatedBit;
 
-				vTaskSuspendAll();
+				UBaseType_t savemask = ENTER_MALLOC_CRITICAL;
 				{
 					/* Add this block to the list of free blocks. */
 					xFreeBytesRemaining += pxLink->xBlockSize;
 					traceFREE( pv, pxLink->xBlockSize );
 					prvInsertBlockIntoFreeList( ( ( BlockLink_t * ) pxLink ) );
 				}
-				( void ) xTaskResumeAll();
+				EXIT_MALLOC_CRITICAL(savemask);
 			}
 			else
 			{
@@ -375,7 +345,7 @@ uint8_t* pbyScratch;
 BlockLink_t* pxLinkThis;
 void* pvNewBlock;
 
-		vTaskSuspendAll();
+		UBaseType_t savemask = ENTER_MALLOC_CRITICAL;
 
 		/* get to the BlockLink_t header that precedes this block */
 		pbyScratch = ((uint8_t*)pvOrig);
@@ -509,7 +479,7 @@ BlockLink_t* pxLinkNewNext;
 			mtCOVERAGE_TEST_MARKER();
 		}
 
-		( void ) xTaskResumeAll();
+		EXIT_MALLOC_CRITICAL(savemask);
 
 		return pvNewBlock;
 	}
@@ -533,18 +503,18 @@ static int inspectHeapCorruption ( BlockLink_t* pxLinkThis, BlockLink_t* pxLinkL
 		return 2;	/* symptom 2:  block pointer out-of-bounds */
 	if ( pxLinkThis <= pxLinkLast )
 		return 3;	/* symptom 3:  linked list moving backwards */
-	if ( ( bAllocated && ! ( (uintptr_t)pxLinkThis & xBlockAllocatedBit ) ) ||
-			( ! bAllocated && ( (uintptr_t)pxLinkThis & xBlockAllocatedBit ) ) )
+	if ( ( bAllocated && ! ( (uintptr_t)pxLinkThis->xBlockSize & xBlockAllocatedBit ) ) ||
+			( ! bAllocated && ( (uintptr_t)pxLinkThis->xBlockSize & xBlockAllocatedBit ) ) )
 		return 4;	/* symptom 4: unexpected allocation state */
 	return 0;	/* no heap corruption detected */
 }
 
 
-typedef int (*CBK_HEAPWALK) ( void* pblk, uint32_t nBlkSize, int bIsFree, void* pinst );
+typedef int (*CBK_HEAPWALK) ( void* pblk, uint32_t nBlkSize, int bIsAlloc, void* pinst );
 
 int vPortHeapWalk ( CBK_HEAPWALK pfnWalk, void* pinst )
 {
-	vTaskSuspendAll();
+	UBaseType_t savemask = ENTER_MALLOC_CRITICAL;
 	
 	/* In the pathological case where we heapwalk before we have init'ed the
 	heap, ensure that the heap is init'ed. */
@@ -557,60 +527,38 @@ int vPortHeapWalk ( CBK_HEAPWALK pfnWalk, void* pinst )
 		mtCOVERAGE_TEST_MARKER();
 	}
 
-	BlockLink_t* pxLinkFree;
+
+	/* blocks are contiguous, so we merely walk them to the end */
+	BlockLink_t* pxLinkPrev;
 	BlockLink_t* pxLinkThis;
-	BlockLink_t* pxLinkLast;
 	int nInspectResult;
 
-	/* the free list is traversed as a linked list, the allocated blocks are
-	  traversed as contiguous blocks between the linked free ones. */
-
-	/* init block pointers */
-	pxLinkFree = xStart.pxNextFreeBlock;
-	pxLinkThis = (BlockLink_t*) ( ucHeap + ( portBYTE_ALIGNMENT - ( (size_t)ucHeap & portBYTE_ALIGNMENT_MASK ) ) );
-	pxLinkLast = NULL;
-
-	/* inspect first block for sanity before proceeding */
-	nInspectResult = inspectHeapCorruption ( pxLinkFree, pxLinkLast, 0 );
-	if ( 0 != nInspectResult )
-		return nInspectResult;
-
-	/* do the heap walk until done */
+	/* start of heap; first block (considering alignment */
+	pxLinkThis = (BlockLink_t*)ucHeap;
+	if( ( (uintptr_t)pxLinkThis & portBYTE_ALIGNMENT_MASK ) != 0 )
+	{
+		*((uint8_t*)pxLinkThis) += ( portBYTE_ALIGNMENT - 1 );
+		pxLinkThis = (BlockLink_t*) ( (uintptr_t)pxLinkThis & ~( ( size_t ) portBYTE_ALIGNMENT_MASK ) );
+	}
+	pxLinkPrev = NULL;	/* no prev block */
 	while ( pxLinkThis != pxEnd )
 	{
-		/* advance through alloc'ed blocks less than the next free'ed block */
-		while ( pxLinkThis < pxLinkFree )
-		{
-			/* inspect this block for sanity */
-			nInspectResult = inspectHeapCorruption ( pxLinkThis, pxLinkLast, 1 );
-			if ( 0 != nInspectResult )
-				return nInspectResult;
-			pxLinkLast = pxLinkThis;
+		int bIsAlloc = pxLinkThis->xBlockSize & xBlockAllocatedBit;
 
-			/* emit data; alloc'ed block */
-			pfnWalk ( pxLinkThis, (pxLinkThis->xBlockSize&~xBlockAllocatedBit), 1, pinst );
-			
-			pxLinkThis = (BlockLink_t*) (((uint8_t*)pxLinkThis) + (pxLinkThis->xBlockSize&~xBlockAllocatedBit));
-		}
-
-		/* now were are doing a single interceding free block */
-		pxLinkThis = pxLinkFree;
-
-		/* inspect this block for sanity */
-		nInspectResult = inspectHeapCorruption ( pxLinkThis, pxLinkLast, 0 );
+		/* inspect for sanity before proceeding */
+		nInspectResult = inspectHeapCorruption ( pxLinkThis, pxLinkPrev, bIsAlloc );
 		if ( 0 != nInspectResult )
 			return nInspectResult;
-		pxLinkLast = pxLinkThis;
 
-		/* emit data; free'ed block */
-		pfnWalk ( pxLinkThis, pxLinkThis->xBlockSize, 0, pinst );
+		/* emit data; alloc'ed block */
+		pfnWalk ( pxLinkThis, (pxLinkThis->xBlockSize&~xBlockAllocatedBit), bIsAlloc, pinst );
 
-		/* advance ptr to next (alloc'ed) block, and next free block */
+		/* advance to next block */
+		pxLinkPrev = pxLinkThis;
 		pxLinkThis = (BlockLink_t*) (((uint8_t*)pxLinkThis) + (pxLinkThis->xBlockSize&~xBlockAllocatedBit));
-		pxLinkFree = pxLinkFree->pxNextFreeBlock;
 	}
 
-	( void ) xTaskResumeAll();
+	EXIT_MALLOC_CRITICAL(savemask);
 
 	/* finished; no detected heap errors */
 	return 0;
